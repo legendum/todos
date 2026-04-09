@@ -1,0 +1,114 @@
+# Chats2Me tool manifest — todos.in
+# One file per service. This file is sufficient for Chats2Me to discover,
+# present, and execute every tool the service exposes.
+
+manifest_version: "0.1.0"
+
+service:
+  id: todos
+  mention: todos                    # what the user types after @
+  display_name: Todos
+  description: List and manage todos.in tasks
+
+server:
+  base_url: https://todos.in
+
+# Authentication: Chats2Me decrypts the user's Legendum account key
+# (users.legendum_account_key_encrypted) and sends it as a Bearer token.
+auth:
+  type: bearer
+  source: legendum_account_key
+
+# Response format conventions:
+#   - Actions path:     append .md to the URL → service returns markdown
+#   - Model path:       append .json (or no extension) → service returns JSON
+#   - Text path:        append .txt → service returns todos.txt format
+
+# --------------------------------------------------------------------------
+# Tools
+# --------------------------------------------------------------------------
+# The API is todos.txt-centric. GET returns the list, POST appends,
+# PUT replaces the whole list. No per-item endpoints needed.
+
+tools:
+  - id: list_categories
+    title: List categories
+    description: Show all todo categories
+    path: /
+    method: GET
+    expose: [actions, model]
+
+  - id: list_todos
+    title: List todos
+    description: Show todos in a category
+    path: /{category}
+    method: GET
+    expose: [actions, model]
+    parameters:
+      - name: category
+        in: path
+        label: Category
+        input: dropdown
+        options:
+          from: GET /
+          value: name
+          label: name
+
+  - id: add_todos
+    title: Add todos
+    description: Append one or more todos to a category (one per line, todos.txt format)
+    path: /{category}
+    method: POST
+    expose: [actions, model]
+    parameters:
+      - name: category
+        in: path
+        label: Category
+        input: dropdown
+        options:
+          from: GET /
+          value: name
+          label: name
+      - name: body
+        in: body
+        label: Todos
+        input: textarea
+        required: true
+        placeholder: "[ ] Buy milk\n[ ] Fix bug #42"
+
+  - id: replace_todos
+    title: Replace todos
+    description: Replace all todos in a category (full todos.txt content)
+    path: /{category}
+    method: PUT
+    expose: [actions, model]
+    parameters:
+      - name: category
+        in: path
+        label: Category
+        input: dropdown
+        options:
+          from: GET /
+          value: name
+          label: name
+      - name: body
+        in: body
+        label: Todos
+        input: textarea
+        required: true
+
+  - id: delete_category
+    title: Delete category
+    description: Delete a category and all its todos
+    path: /{category}
+    method: DELETE
+    expose: [actions, model]
+    parameters:
+      - name: category
+        in: path
+        label: Category
+        input: dropdown
+        options:
+          from: GET /
+          value: name
+          label: name
