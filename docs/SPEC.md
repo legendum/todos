@@ -123,12 +123,12 @@ A skill file (e.g. `.claude/skills/todos.md` or `.cursorrules`) that teaches age
 External tools like chats2me access the authenticated API using a Legendum account key (`lak_...`) as a bearer token. The API uses clean category-name routes matching the `todos.in/<name>` pattern:
 
 - `GET /` — list all categories
-- `GET /:category` — get todos (returns `todos.txt` format, or JSON/YAML/Markdown via content negotiation)
+- `GET /:category` — get todos (returns `todos.txt` format, or JSON via content negotiation)
 - `POST /:category` — append todos (body is `todos.txt` format lines to add)
 - `PUT /:category` — replace all todos (body is full `todos.txt` content)
 - `DELETE /:category` — delete the category
 
-Responses support `.md`, `.json`, `.yaml`, `.txt` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
+Responses support `.json`, `.txt` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
 
 ---
 
@@ -241,8 +241,6 @@ All category routes support multiple response formats:
 - **HTML** — default for browsers (`Accept: text/html` or no extension). Returns the full PWA page.
 - **Text** — `Accept: text/plain` or `.txt` extension (e.g. `GET /shopping.txt`). Returns `todos.txt` format.
 - **JSON** — `Accept: application/json` or `.json` extension.
-- **YAML** — `Accept: application/yaml` or `.yaml` extension.
-- **Markdown** — `Accept: text/markdown` or `.md` extension.
 
 ### Categories & todos (auth)
 
@@ -386,7 +384,7 @@ No config file required. All configuration via environment variables:
 
 - [ ] **DB**: Create `data/todos.db` from schema.sql (users, categories). Two tables only.
 - [ ] **Auth & Legendum**: Login/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget.
-- [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/POST/PUT/DELETE /:category`. Content negotiation (HTML, text, JSON, YAML, Markdown). `todos.txt` stored as text column on categories.
+- [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/POST/PUT/DELETE /:category`. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
 - [ ] **Webhook**: `GET/POST/PUT /w/:ulid` — public read/append/replace in `todos.txt` format; quota on writes.
 - [ ] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
 - [ ] **Quotas & billing**: Weekly reset job. Legendum credit charging fallback.
