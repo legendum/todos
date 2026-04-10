@@ -1,11 +1,11 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { getDb } from "../lib/db.js";
 import { closeTabs } from "../lib/billing.js";
 import { isSelfHosted } from "../lib/mode.js";
 import { requireAuth, requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
-const root = process.cwd();
+const root = resolve(import.meta.dir, "../..");
 
 import * as authHandlers from "./handlers/auth.js";
 import * as categoryHandlers from "./handlers/categories.js";
