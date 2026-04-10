@@ -32,7 +32,7 @@ The server stores todos in SQLite but every API surface speaks this format. The 
 5. **Auto-logout on unlink**: If the user unlinks todos in Legendum, the frontend detects the status change and automatically logs out.
 6. **Legendum middleware**: All Legendum integration (login, linking, billing) uses the Legendum SDK (`src/lib/legendum.js`) and Legendum middleware for `/t/legendum/*` routes.
 
-No passwords, no email stored. The `legendum_token` (stable account-service token) is the user identity.
+No passwords. The user's **email** (from Legendum) is the stable identity — it uniquely identifies the user across devices and re-links. The `legendum_token` is a billing token that may change on re-link; it is updated on every login but never used for identity.
 
 ### 2.2 Categories
 
@@ -147,7 +147,7 @@ Responses support `.json`, `.txt` extensions for format selection. See `docs/tod
 
 **Hierarchy:** A user has categories; a category has todos.
 
-- **users**: `id` (PK), `legendum_token` (UNIQUE, stable account-service token for billing and identity), `created_at`.
+- **users**: `id` (PK), `email` (UNIQUE, NOT NULL — stable identity from Legendum; `local@localhost` for self-hosted), `legendum_token` (account-service token for billing — updated on each login), `created_at`.
 - **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.txt` content), `created_at`.
 
 That's it. Two tables. The `text` column stores the canonical `todos.txt` content — the server doesn't parse it into rows.
@@ -399,6 +399,7 @@ No cron jobs needed — billing is handled by Legendum tabs.
 
 ## 13. Future developments
 
+- **Email notifications**: User email is stored, enabling future transactional email (e.g. daily digest, todo reminders).
 - **Alert integration**: Optionally notify via Alert service when todos are added/completed.
 - **Native mobile apps**: Android and iOS via app stores.
 - **Payment**: Adjustable pricing tiers via Legendum.

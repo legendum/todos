@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { getDb } from "../lib/db.js";
 import { closeTabs } from "../lib/billing.js";
-import { isSelfHosted } from "../lib/mode.js";
+import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
 import { requireAuth, requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
@@ -174,7 +174,7 @@ export default {
       const db = getDb();
       let user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number } | null;
       if (!user) {
-        db.run("INSERT INTO users (legendum_token) VALUES (NULL)");
+        db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
         user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
       }
       const userId = user.id;

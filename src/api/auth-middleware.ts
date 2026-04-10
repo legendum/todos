@@ -34,15 +34,19 @@ export async function getAuthUserIdWithBearer(req: Request): Promise<number | nu
   if (!legendum.isConfigured()) return null;
 
   try {
-    const { token } = await legendum.linkAccount(accountKey);
-    if (!token) return null;
+    const { token, email } = await legendum.linkAccount(accountKey);
+    if (!token || !email) return null;
 
     const db = getDb();
-    // Find user by legendum_token
+    // Find user by email (stable identity)
     const row = db
-      .query("SELECT id FROM users WHERE legendum_token = ?")
-      .get(token) as { id: number } | undefined;
-    return row?.id ?? null;
+      .query("SELECT id FROM users WHERE email = ?")
+      .get(email) as { id: number } | undefined;
+    if (!row) return null;
+
+    // Update billing token
+    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", token, row.id);
+    return row.id;
   } catch {
     return null;
   }

@@ -2,10 +2,12 @@
 -- Database: data/todos.db
 
 -- Users: one row per Legendum account. Authenticated via Login and Link with Legendum.
--- legendum_token: stable account-service token for charging credits via Legendum tabs.
+-- email: stable identity from Legendum (NULL for self-hosted mode).
+-- legendum_token: account-service token for charging credits via Legendum tabs.
 CREATE TABLE IF NOT EXISTS users (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  legendum_token TEXT UNIQUE,
+  email          TEXT NOT NULL UNIQUE,
+  legendum_token TEXT,
   created_at     INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 

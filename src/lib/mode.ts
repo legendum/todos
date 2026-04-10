@@ -29,3 +29,6 @@ export function isSelfHosted(): boolean {
 export function setByLegendum(value: boolean | null): void {
   byLegendumOverride = value;
 }
+
+/** The well-known user email used in self-hosted mode. */
+export const LOCAL_USER_EMAIL = "local@localhost";

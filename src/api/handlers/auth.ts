@@ -6,6 +6,7 @@ import { json } from "../json.js";
 const legendum = require("../../lib/legendum.js");
 
 type LegendumExchange = {
+  email: string;
   linked: boolean;
   legendum_token?: string;
   account_token?: string;
@@ -63,21 +64,27 @@ export async function getCallback(req: Request): Promise<Response> {
   }
 
   const db = getDb();
-  const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
+  const { email } = data;
 
-  if (!serviceToken) {
-    return json({ error: "auth_failed", message: "Login response missing service token" }, 400);
+  if (!email) {
+    return json({ error: "auth_failed", message: "Could not read email from Legendum" }, 400);
   }
 
-  let user = db.query("SELECT id FROM users WHERE legendum_token = ?").get(serviceToken) as {
+  const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
+
+  // Find or create user by email (stable identity)
+  let user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
     id: number;
   } | null;
 
   if (!user) {
-    db.run("INSERT INTO users (legendum_token) VALUES (?)", serviceToken);
-    user = db.query("SELECT id FROM users WHERE legendum_token = ?").get(serviceToken) as {
+    db.run("INSERT INTO users (email, legendum_token) VALUES (?, ?)", email, serviceToken);
+    user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
       id: number;
     };
+  } else if (serviceToken) {
+    // Update billing token (may change across devices/sessions)
+    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", serviceToken, user.id);
   }
 
   const sessionCookie = setAuthCookieHeader(user.id);
