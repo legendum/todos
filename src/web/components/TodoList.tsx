@@ -84,6 +84,17 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
   );
 
+  // Update page title with category name and counts
+  useEffect(() => {
+    const todos = lines.filter((l) => l.isTodo);
+    const done = todos.filter((l) => l.done).length;
+    const total = todos.length;
+    document.title = total > 0
+      ? `${category.name} (${done}/${total}) — Todos`
+      : `${category.name} — Todos`;
+    return () => { document.title = "Todos"; };
+  }, [category.name, lines]);
+
   // Fetch initial content and start SSE
   useEffect(() => {
     fetch(`/${category.slug}.txt`, { credentials: "include" })
