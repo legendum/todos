@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import InstallDialog from "./InstallDialog";
 
 // @ts-expect-error — pure JS SDK
 let linkController: any = null;
@@ -23,6 +24,7 @@ export default function TopBar({ isSelfHosted }: Props) {
     error: null,
   });
   const ctrlRef = useRef<any>(null);
+  const [showInstall, setShowInstall] = useState(false);
 
   const wasLinkedRef = useRef(false);
 
@@ -63,7 +65,11 @@ export default function TopBar({ isSelfHosted }: Props) {
 
   return (
     <header className="topbar">
-      <div className="topbar-left">
+      <div
+        className="topbar-left"
+        onClick={() => setShowInstall(true)}
+        style={{ cursor: "pointer" }}
+      >
         <img
           src="/todos.png"
           alt="Todos"
@@ -107,6 +113,7 @@ export default function TopBar({ isSelfHosted }: Props) {
           ) : null}
         </div>
       )}
+      {showInstall && <InstallDialog onClose={() => setShowInstall(false)} />}
     </header>
   );
 }

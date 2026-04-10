@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, copyFileSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { execSync } from "node:child_process";
 
 const TODOS_FILE = "todos.txt";
@@ -137,6 +137,43 @@ function printTodos(content: string): void {
   }
 }
 
+/** Install the todos skill file for Claude Code and Cursor. */
+function installSkill(): void {
+  // Find the skill source — either from the install dir or the repo
+  const installDir = join(process.env.HOME || "~", ".config/todos/src");
+  const repoDir = join(dirname(dirname(__dirname)));
+  const skillSource = [
+    join(installDir, ".claude/skills/todos.md"),
+    join(repoDir, ".claude/skills/todos.md"),
+  ].find(existsSync);
+
+  if (!skillSource) {
+    console.error("Could not find todos skill file. Is todos installed?");
+    process.exit(1);
+  }
+
+  const skill = readFileSync(skillSource, "utf-8");
+  let installed = 0;
+
+  // Claude Code: ~/.claude/skills/todos.md
+  const claudePath = join(process.env.HOME || "~", ".claude/skills/todos.md");
+  mkdirSync(dirname(claudePath), { recursive: true });
+  writeFileSync(claudePath, skill);
+  console.log(`  Claude Code: ${claudePath}`);
+  installed++;
+
+  // Cursor: ~/.cursor/rules/todos.mdc
+  const cursorPath = join(process.env.HOME || "~", ".cursor/rules/todos.mdc");
+  if (existsSync(join(process.env.HOME || "~", ".cursor"))) {
+    mkdirSync(dirname(cursorPath), { recursive: true });
+    writeFileSync(cursorPath, skill);
+    console.log(`  Cursor:      ${cursorPath}`);
+    installed++;
+  }
+
+  console.log(`\nInstalled todos skill for ${installed} agent(s).`);
+}
+
 async function main() {
   let webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
@@ -237,6 +274,9 @@ async function main() {
       todo: t.todo,
     }));
     lines = [...remaining, ...movedLines];
+  } else if (command === "skill" && args.length === 1) {
+    installSkill();
+    return;
   } else if (command === "open" && args.length === 1) {
     // Open in browser
     const baseUrl = webhookUrl.replace(/\/w\/[A-Z0-9]+$/, "");
