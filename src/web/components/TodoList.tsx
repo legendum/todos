@@ -71,7 +71,7 @@ type Props = {
 export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [lines, setLines] = useState<Line[]>([]);
   const [newTodo, setNewTodo] = useState("");
-  const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
@@ -154,9 +154,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     ]);
   };
 
-  const saveEdit = () => {
-    if (!editing) return;
-    const { index, text } = editing;
+  const saveEdit = (index: number, text: string) => {
     if (!text.trim()) {
       deleteLine(index);
     } else {
@@ -164,7 +162,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         prev.map((l, i) => (i === index ? { ...l, text: text.trim() } : l)),
       );
     }
-    setEditing(null);
+    setEditingIndex(null);
   };
 
   const copyWebhookUrl = () => {
@@ -298,9 +296,12 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                 key={line.id}
                 line={line}
                 index={index}
+                isEditing={editingIndex === index}
                 onToggle={() => toggleDone(index)}
                 onDelete={() => deleteLine(index)}
-                onEdit={() => setEditing({ index, text: line.text })}
+                onEdit={() => setEditingIndex(index)}
+                onSaveEdit={(text) => saveEdit(index, text)}
+                onCancelEdit={() => setEditingIndex(null)}
               />
             ))}
           </SortableContext>
@@ -340,28 +341,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </button>
       </div>
 
-      {editing && (
-        <div className="edit-overlay" onClick={() => setEditing(null)}>
-          <div className="edit-panel" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: 16 }}>Edit todo</h3>
-            <input
-              className="input"
-              value={editing.text}
-              onChange={(e) => setEditing({ ...editing, text: e.target.value })}
-              onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-              autoFocus
-            />
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button className="btn" onClick={saveEdit}>
-                Save
-              </button>
-              <button className="btn btn-secondary" onClick={() => setEditing(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -369,16 +348,28 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
 function SortableLine({
   line,
   index,
+  isEditing,
   onToggle,
   onDelete,
   onEdit,
+  onSaveEdit,
+  onCancelEdit,
 }: {
   line: Line;
   index: number;
+  isEditing: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onSaveEdit: (text: string) => void;
+  onCancelEdit: () => void;
 }) {
+  const [editText, setEditText] = useState(line.text);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing) setEditText(line.text);
+  }, [isEditing, line.text]);
   const {
     attributes,
     listeners,
@@ -434,9 +425,29 @@ function SortableLine({
               >
                 {line.done && <CheckIcon />}
               </button>
-              <span className={`todo-text${line.done ? " done" : ""}`}>
-                {line.text}
-              </span>
+              {isEditing ? (
+                <input
+                  ref={editInputRef}
+                  className="todo-text-edit"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onBlur={() => onSaveEdit(editText)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === "Escape") {
+                      setEditText(line.text);
+                      onCancelEdit();
+                    }
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <span className={`todo-text${line.done ? " done" : ""}`}>
+                  {line.text}
+                </span>
+              )}
             </div>
           </div>
           <button className="row-delete" onClick={onDelete}>

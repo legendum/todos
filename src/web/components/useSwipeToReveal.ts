@@ -44,6 +44,7 @@ export function useSwipeToReveal(options: { onTap?: () => void } = {}): SwipeToR
     const target = e.target as HTMLElement;
     if (target.closest?.("button.row-delete")) return;
     if (target.closest?.(".drag-handle")) return;
+    if (target.closest?.(".todo-checkbox")) return;
     if (e.pointerType === "mouse") e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragStart.current = { x: e.clientX, offset: offsetRef.current };

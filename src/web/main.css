@@ -334,6 +334,18 @@ body {
   text-decoration: line-through;
   color: #64748b;
 }
+.todo-text-edit {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font: inherit;
+  background: #1e293b;
+  color: inherit;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 2px 4px;
+  outline: none;
+}
 
 /* Free-form text line */
 .freeform-line {
@@ -415,22 +427,3 @@ body {
   margin-left: 8px;
 }
 
-/* Edit todo overlay */
-.edit-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 16px;
-}
-.edit-panel {
-  background: #1e293b;
-  border-radius: 12px;
-  padding: 20px;
-  max-width: 400px;
-  width: 100%;
-  border: 1px solid #334155;
-}
