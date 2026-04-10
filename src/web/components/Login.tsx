@@ -5,7 +5,7 @@ export default function Login() {
       <h1>Todos</h1>
       <p>Simple todo lists for humans and agents.</p>
       <a
-        href="/t/auth/login"
+        href="/auth/login"
         className="btn"
         style={{
           display: "inline-block",

@@ -6,7 +6,6 @@ import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
 
 type User = {
-  email: string;
   legendum_linked: boolean;
 };
 
@@ -33,7 +32,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const isSelfHosted = user?.email === "local@localhost";
+  const isSelfHosted = user ? !user.legendum_linked : false;
 
   const fetchUser = useCallback(async () => {
     try {

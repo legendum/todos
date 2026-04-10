@@ -23,15 +23,16 @@ The server stores todos in SQLite but every API surface speaks this format. The 
 
 ## 2. User flows
 
-### 2.1 Auth (Login with Legendum)
+### 2.1 Auth (Login and Link with Legendum)
 
-1. **Login**: User clicks "Login with Legendum" → redirect to Legendum OAuth authorization URL with CSRF state token.
-2. **Callback**: Legendum returns to `/t/auth/callback` with code + state → backend exchanges code for `{ email, linked, legendum_token }`.
+1. **Login**: User clicks "Login with Legendum" → backend calls `requestLink()` then redirects to Legendum authorize URL via `authAndLinkUrl()` (login + service linking in one flow).
+2. **Callback**: Legendum returns to `/auth/callback` with code + state → backend exchanges code for `{ email, linked, legendum_token }`.
 3. **Session**: Backend creates/updates user in `users` table, sets encrypted session cookie (HMAC-SHA256, 30-day expiry).
-4. **Logout**: `POST /t/auth/logout` → unset cookie.
-5. **Legendum middleware**: All Legendum integration (login, linking, billing) uses the Legendum SDK (`src/lib/legendum.js`) and Legendum middleware for `/t/legendum/*` routes.
+4. **Logout**: `POST /auth/logout` → unset cookie.
+5. **Auto-logout on unlink**: If the user unlinks todos in Legendum, the frontend detects the status change and automatically logs out.
+6. **Legendum middleware**: All Legendum integration (login, linking, billing) uses the Legendum SDK (`src/lib/legendum.js`) and Legendum middleware for `/t/legendum/*` routes.
 
-No passwords, no extra profile fields. Email = identity.
+No passwords, no email stored. The `legendum_token` (stable account-service token) is the user identity.
 
 ### 2.2 Categories
 
@@ -146,7 +147,7 @@ Responses support `.json`, `.txt` extensions for format selection. See `docs/tod
 
 **Hierarchy:** A user has categories; a category has todos.
 
-- **users**: `id` (PK), `email` (UNIQUE), `legendum_token` (for Legendum tabs billing), `created_at`.
+- **users**: `id` (PK), `legendum_token` (UNIQUE, stable account-service token for billing and identity), `created_at`.
 - **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.txt` content), `created_at`.
 
 That's it. Two tables. The `text` column stores the canonical `todos.txt` content — the server doesn't parse it into rows.
@@ -182,6 +183,8 @@ src/
   cli/              # CLI command parser
     main.ts
   lib/              # Shared utilities
+    constants.ts    # PORT, HOST
+    mode.ts         # isByLegendum(), isSelfHosted()
     db.ts
     legendum.js
 public/             # Static assets (logo, manifest, dist/)
@@ -246,9 +249,9 @@ When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no l
 
 ### Auth & Legendum
 
-- `GET /t/auth/login` — redirect to Legendum authorization URL.
-- `GET /t/auth/callback` — exchange code for user info; create/update user; set cookie.
-- `POST /t/auth/logout` — unset session cookie.
+- `GET /auth/login` — login and link via Legendum (requestLink + authAndLinkUrl redirect).
+- `GET /auth/callback` — exchange code for user info; create/update user; set cookie.
+- `POST /auth/logout` — unset session cookie.
 - `/t/legendum/*` — handled by Legendum middleware (link/unlink/billing widget).
 
 ### Content negotiation
@@ -270,7 +273,7 @@ All category routes support multiple response formats:
 
 ### Settings
 
-- `GET /t/settings/me` — return email, legendum_linked.
+- `GET /t/settings/me` — return legendum_linked.
 
 ### Public webhook (no auth, no API key)
 
@@ -320,10 +323,14 @@ This lets the web UI update in real time as agents work on todos via the webhook
 
 No config file required. All configuration via environment variables:
 
-- `TODOS_DOMAIN` — default: `http://localhost:3030` (dev), `https://todos.in` (prod).
+- `PORT` — default: `3000`. Server listen port.
+- `HOST` — default: `0.0.0.0`. Server bind host.
+- `TODOS_DOMAIN` — default: `http://localhost:${PORT}` (dev), `https://todos.in` (prod).
 - `TODOS_DB_PATH` — default: `data/todos.db`.
-- `TODOS_COOKIE_SECRET` — required in production.
-- `LEGENDUM_API_KEY` — if set, enables Legendum auth/billing. If not set, self-hosted mode (no auth, no quota).
+- `TODOS_COOKIE_SECRET` — required in hosted mode.
+- `LEGENDUM_API_KEY` — if set, enables hosted mode (Legendum auth/billing). If not set, self-hosted mode (no auth, no quota). This is the sole signal for hosted vs self-hosted — no `NODE_ENV` needed.
+- `LEGENDUM_SECRET` — required when `LEGENDUM_API_KEY` is set.
+- `LEGENDUM_BASE_URL` — default: `https://legendum.co.uk`.
 
 ### .env (per-project, for CLI)
 
@@ -357,7 +364,7 @@ No config file required. All configuration via environment variables:
 ### 9.3 Settings
 
 - Log out.
-- Legendum link/unlink (via Legendum widget).
+- Legendum link/unlink (via Legendum widget). Unlinking auto-logs out.
 
 ---
 
@@ -401,12 +408,12 @@ No cron jobs needed — billing is handled by Legendum tabs.
 ## Checklist (implementation)
 
 - [ ] **DB**: Create `data/todos.db` from schema.sql (users, categories). Two tables only.
-- [ ] **Auth & Legendum**: Login/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget.
+- [ ] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
 - [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
 - [ ] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.txt` format; PUT and POST identical; quota on writes.
 - [ ] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
 - [ ] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
-- [ ] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware.
+- [ ] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
 - [ ] **Frontend — layout**: Top bar (logo, settings); categories list ordered by position; mobile-first portrait PWA.
 - [ ] **Frontend — screens**: Login; Categories list; Todo list per category; Settings; Create category.
 - [ ] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.

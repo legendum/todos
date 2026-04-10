@@ -1,4 +1,5 @@
-import { isSelfHosted, chargeWebhookWrite } from "../../lib/billing.js";
+import { chargeWebhookWrite } from "../../lib/billing.js";
+import { isSelfHosted } from "../../lib/mode.js";
 import { getDb } from "../../lib/db.js";
 import { broadcast, subscribe } from "../../lib/sse.js";
 import { countTodos, validateTodosText } from "../../lib/todos.js";

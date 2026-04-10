@@ -24,7 +24,23 @@ export default function TopBar({ isSelfHosted }: Props) {
   });
   const ctrlRef = useRef<any>(null);
 
+  const wasLinkedRef = useRef(false);
+
   const legendumLinked = linkState.status === "linked";
+  const lowCredits =
+    legendumLinked &&
+    linkState.balance !== null &&
+    linkState.balance < 50;
+
+  // Auto-logout when Legendum is unlinked
+  useEffect(() => {
+    if (legendumLinked) {
+      wasLinkedRef.current = true;
+    } else if (wasLinkedRef.current && linkState.status === "unlinked") {
+      fetch("/auth/logout", { method: "POST", credentials: "include" })
+        .finally(() => window.location.reload());
+    }
+  }, [legendumLinked, linkState.status]);
 
   useEffect(() => {
     if (isSelfHosted || !linkController) return;
@@ -62,12 +78,12 @@ export default function TopBar({ isSelfHosted }: Props) {
               href={ctrlRef.current?.accountUrl || "https://legendum.co.uk/account"}
               target="_blank"
               rel="noopener noreferrer"
-              className="legendum-btn legendum-linked"
+              className={`legendum-btn legendum-linked${lowCredits ? " low-credits" : ""}`}
             >
               <span className="legendum-icon">&#x2C60;</span>
               <span>
                 {linkState.balance !== null
-                  ? `${linkState.balance.toLocaleString()}`
+                  ? `${linkState.balance.toLocaleString()} Credits`
                   : "Credits"}
               </span>
             </a>

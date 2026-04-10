@@ -97,6 +97,9 @@ body {
   font-size: 11px;
   font-weight: 700;
 }
+.legendum-linked.low-credits {
+  border: 2px solid #84cc16;
+}
 .legendum-linked .legendum-icon {
   background: #475569;
 }

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { getDb } from "../lib/db.js";
-import { isSelfHosted, closeTabs } from "../lib/billing.js";
+import { closeTabs } from "../lib/billing.js";
+import { isSelfHosted } from "../lib/mode.js";
 import { requireAuth, requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
@@ -17,8 +18,7 @@ const legendumSdk = require("../lib/legendum.js");
 // Initialize DB
 getDb();
 
-const PORT = 3030;
-const isDev = process.env.NODE_ENV !== "production";
+import { PORT } from "../lib/constants.js";
 
 // Legendum middleware for link/unlink
 const legendumMiddleware = legendumSdk.isConfigured()
@@ -92,7 +92,7 @@ async function serveIndex(): Promise<Response> {
 
 export default {
   port: PORT,
-  development: isDev,
+  development: !!process.env.DEV,
   async fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
@@ -106,15 +106,15 @@ export default {
 
     // --- Auth (no auth required) ---
     if (legendumSdk.isConfigured()) {
-      if (path === "/t/auth/login" && method === "GET") {
-        res = authHandlers.getLogin(req);
+      if (path === "/auth/login" && method === "GET") {
+        res = await authHandlers.getLogin(req);
         return addCors(res);
       }
-      if (path === "/t/auth/callback" && method === "GET") {
+      if (path === "/auth/callback" && method === "GET") {
         res = await authHandlers.getCallback(req);
         return addCors(res);
       }
-      if (path === "/t/auth/logout" && method === "POST") {
+      if (path === "/auth/logout" && method === "POST") {
         res = await authHandlers.postLogout();
         return addCors(res);
       }
@@ -174,7 +174,7 @@ export default {
       const db = getDb();
       let user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number } | null;
       if (!user) {
-        db.run("INSERT INTO users (email) VALUES (?)", "local@localhost");
+        db.run("INSERT INTO users (legendum_token) VALUES (NULL)");
         user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
       }
       const userId = user.id;

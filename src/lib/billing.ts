@@ -1,4 +1,5 @@
 import { getDb } from "./db.js";
+import { isSelfHosted } from "./mode.js";
 
 // @ts-expect-error — pure JS SDK
 const legendum = require("./legendum.js");
@@ -7,9 +8,6 @@ export function isConfigured(): boolean {
   return legendum.isConfigured();
 }
 
-export function isSelfHosted(): boolean {
-  return !isConfigured();
-}
 
 /** Module-level tabs map: one long-lived tab per user token. */
 const tabs = new Map<string, any>();

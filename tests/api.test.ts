@@ -8,9 +8,10 @@ const PORT = 3031;
 let server: any;
 
 beforeAll(async () => {
-  // Set up test environment
+  // Set up test environment — force self-hosted mode
   process.env.TODOS_DB_PATH = TEST_DB_PATH;
-  process.env.NODE_ENV = "test";
+  delete process.env.LEGENDUM_API_KEY;
+  delete process.env.LEGENDUM_SECRET;
 
   // Ensure data directory exists
   mkdirSync("data", { recursive: true });
@@ -62,7 +63,6 @@ describe("API — self-hosted mode", () => {
   test("GET /t/settings/me returns local user", async () => {
     const { status, body } = await jsonGet("/t/settings/me");
     expect(status).toBe(200);
-    expect(body.email).toBe("local@localhost");
     expect(body.legendum_linked).toBe(false);
   });
 

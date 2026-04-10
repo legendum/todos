@@ -6,30 +6,24 @@ import { json } from "../json.js";
 const legendum = require("../../lib/legendum.js");
 
 type LegendumExchange = {
-  email: string;
   linked: boolean;
   legendum_token?: string;
   account_token?: string;
   token?: string;
 };
 
-export function getLogin(req: Request): Response {
+export async function getLogin(req: Request): Promise<Response> {
   const domain = getDomain();
   const state = crypto.randomUUID();
-  const redirectUri = `${domain}/t/auth/callback`;
+  const redirectUri = `${domain}/auth/callback`;
 
-  const { code: linkCode } = legendum.requestLink
-    ? { code: undefined }
-    : { code: undefined };
-
-  let url: string;
-  try {
-    // Try auth-and-link flow first
-    const linkResult = legendum.requestLink ? null : null;
-    url = legendum.authUrl({ redirectUri, state });
-  } catch {
-    url = legendum.authUrl({ redirectUri, state });
-  }
+  // Login + link in one redirect
+  const linkData = await legendum.requestLink();
+  const url = legendum.authAndLinkUrl({
+    redirectUri,
+    state,
+    linkCode: linkData.code,
+  });
 
   const stateCookie = `todos_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`;
   return new Response(null, {
@@ -58,7 +52,7 @@ export async function getCallback(req: Request): Promise<Response> {
     return json({ error: "invalid_state", message: "State mismatch" }, 400);
   }
 
-  const redirectUri = `${domain}/t/auth/callback`;
+  const redirectUri = `${domain}/auth/callback`;
 
   let data: LegendumExchange;
   try {
@@ -68,27 +62,22 @@ export async function getCallback(req: Request): Promise<Response> {
     return json({ error: "auth_failed", message: "Login failed" }, 400);
   }
 
-  const email = data.email?.trim();
-  if (!email) {
-    return json({ error: "auth_failed", message: "Login response missing email" }, 400);
-  }
-
   const db = getDb();
   const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
 
-  let user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
+  if (!serviceToken) {
+    return json({ error: "auth_failed", message: "Login response missing service token" }, 400);
+  }
+
+  let user = db.query("SELECT id FROM users WHERE legendum_token = ?").get(serviceToken) as {
     id: number;
   } | null;
 
   if (!user) {
-    db.run("INSERT INTO users (email) VALUES (?)", email);
-    user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
+    db.run("INSERT INTO users (legendum_token) VALUES (?)", serviceToken);
+    user = db.query("SELECT id FROM users WHERE legendum_token = ?").get(serviceToken) as {
       id: number;
     };
-  }
-
-  if (serviceToken) {
-    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", serviceToken, user.id);
   }
 
   const sessionCookie = setAuthCookieHeader(user.id);

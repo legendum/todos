@@ -1,12 +1,11 @@
 -- Todos DB schema (SQLite)
 -- Database: data/todos.db
 
--- Users: one row per email. Authenticated via Login with Legendum.
--- legendum_token: for charging credits via Legendum tabs.
+-- Users: one row per Legendum account. Authenticated via Login and Link with Legendum.
+-- legendum_token: stable account-service token for charging credits via Legendum tabs.
 CREATE TABLE IF NOT EXISTS users (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  email          TEXT NOT NULL UNIQUE,
-  legendum_token TEXT,
+  legendum_token TEXT UNIQUE,
   created_at     INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 

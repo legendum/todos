@@ -1,4 +1,6 @@
 import { createHmac } from "node:crypto";
+import { PORT } from "./constants.js";
+import { isByLegendum } from "./mode.js";
 
 const COOKIE_NAME = "todos_session";
 const MAX_AGE = 30 * 24 * 60 * 60; // 30 days
@@ -44,10 +46,10 @@ export function getUserIdFromRequest(req: Request): number | null {
 }
 
 export function getDomain(): string {
-  if (process.env.NODE_ENV === "production") {
+  if (isByLegendum()) {
     return process.env.TODOS_DOMAIN || "https://todos.in";
   }
-  return process.env.TODOS_DOMAIN || "http://localhost:3030";
+  return process.env.TODOS_DOMAIN || `http://localhost:${PORT}`;
 }
 
 export function setAuthCookieHeader(userId: number): string {
