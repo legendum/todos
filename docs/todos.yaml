@@ -54,28 +54,6 @@ tools:
           value: name
           label: name
 
-  - id: add_todos
-    title: Add todos
-    description: Append one or more todos to a category (one per line, todos.txt format)
-    path: /{category}
-    method: POST
-    expose: [actions, model]
-    parameters:
-      - name: category
-        in: path
-        label: Category
-        input: dropdown
-        options:
-          from: GET /
-          value: name
-          label: name
-      - name: body
-        in: body
-        label: Todos
-        input: textarea
-        required: true
-        placeholder: "[ ] Buy milk\n[ ] Fix bug #42"
-
   - id: replace_todos
     title: Replace todos
     description: Replace all todos in a category (full todos.txt content)

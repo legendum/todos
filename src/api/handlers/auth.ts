@@ -1,0 +1,115 @@
+import { clearAuthCookieHeader, getDomain, setAuthCookieHeader } from "../../lib/auth.js";
+import { getDb } from "../../lib/db.js";
+import { json } from "../json.js";
+
+// @ts-expect-error — pure JS SDK
+const legendum = require("../../lib/legendum.js");
+
+type LegendumExchange = {
+  email: string;
+  linked: boolean;
+  legendum_token?: string;
+  account_token?: string;
+  token?: string;
+};
+
+export function getLogin(req: Request): Response {
+  const domain = getDomain();
+  const state = crypto.randomUUID();
+  const redirectUri = `${domain}/t/auth/callback`;
+
+  const { code: linkCode } = legendum.requestLink
+    ? { code: undefined }
+    : { code: undefined };
+
+  let url: string;
+  try {
+    // Try auth-and-link flow first
+    const linkResult = legendum.requestLink ? null : null;
+    url = legendum.authUrl({ redirectUri, state });
+  } catch {
+    url = legendum.authUrl({ redirectUri, state });
+  }
+
+  const stateCookie = `todos_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`;
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: url,
+      "Set-Cookie": stateCookie,
+    },
+  });
+}
+
+export async function getCallback(req: Request): Promise<Response> {
+  const domain = getDomain();
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+
+  if (!code || !state) {
+    return json({ error: "invalid_request", message: "Missing code or state" }, 400);
+  }
+
+  const cookie = req.headers.get("Cookie") ?? "";
+  const stateMatch = cookie.match(/todos_oauth_state=([^;]+)/);
+  const savedState = stateMatch?.[1];
+  if (state !== savedState) {
+    return json({ error: "invalid_state", message: "State mismatch" }, 400);
+  }
+
+  const redirectUri = `${domain}/t/auth/callback`;
+
+  let data: LegendumExchange;
+  try {
+    data = (await legendum.exchangeCode(code, redirectUri)) as LegendumExchange;
+  } catch (err: unknown) {
+    console.error("Legendum code exchange failed", err);
+    return json({ error: "auth_failed", message: "Login failed" }, 400);
+  }
+
+  const email = data.email?.trim();
+  if (!email) {
+    return json({ error: "auth_failed", message: "Login response missing email" }, 400);
+  }
+
+  const db = getDb();
+  const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
+
+  let user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
+    id: number;
+  } | null;
+
+  if (!user) {
+    db.run("INSERT INTO users (email) VALUES (?)", email);
+    user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
+      id: number;
+    };
+  }
+
+  if (serviceToken) {
+    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", serviceToken, user.id);
+  }
+
+  const sessionCookie = setAuthCookieHeader(user.id);
+  const clearState = "todos_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+
+  return new Response(null, {
+    status: 302,
+    headers: [
+      ["Location", `${domain}/`],
+      ["Set-Cookie", sessionCookie],
+      ["Set-Cookie", clearState],
+    ] as [string, string][],
+  });
+}
+
+export async function postLogout(): Promise<Response> {
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Set-Cookie": clearAuthCookieHeader(),
+    },
+  });
+}

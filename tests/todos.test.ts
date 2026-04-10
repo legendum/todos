@@ -1,0 +1,132 @@
+import { describe, expect, test } from "bun:test";
+import { countTodos, toSlug, validateCategoryName, validateTodosText } from "../src/lib/todos";
+
+describe("countTodos", () => {
+  test("counts todos and done items", () => {
+    const text = `[ ] Buy milk
+[x] Fix bug
+[ ] Deploy`;
+    expect(countTodos(text)).toEqual({ total: 3, done: 1 });
+  });
+
+  test("ignores free-form text", () => {
+    const text = `## Sprint 3
+Context: shipping by Friday
+
+[ ] Buy milk
+[x] Fix bug
+
+## Backlog
+[ ] Refactor`;
+    expect(countTodos(text)).toEqual({ total: 3, done: 1 });
+  });
+
+  test("empty text", () => {
+    expect(countTodos("")).toEqual({ total: 0, done: 0 });
+  });
+
+  test("all done", () => {
+    const text = `[x] A
+[x] B`;
+    expect(countTodos(text)).toEqual({ total: 2, done: 2 });
+  });
+
+  test("no todos, only free-form text", () => {
+    const text = `## Notes
+Just some random text
+Another line`;
+    expect(countTodos(text)).toEqual({ total: 0, done: 0 });
+  });
+});
+
+describe("toSlug", () => {
+  test("lowercases and replaces spaces with hyphens", () => {
+    expect(toSlug("My Shopping List")).toBe("my-shopping-list");
+  });
+
+  test("replaces underscores with hyphens", () => {
+    expect(toSlug("work_tasks")).toBe("work-tasks");
+  });
+
+  test("collapses multiple spaces/hyphens", () => {
+    expect(toSlug("hello   world")).toBe("hello-world");
+    expect(toSlug("a--b")).toBe("a-b");
+  });
+
+  test("strips non-alphanumeric chars", () => {
+    expect(toSlug("what's up?")).toBe("whats-up");
+  });
+
+  test("trims leading/trailing hyphens", () => {
+    expect(toSlug(" -hello- ")).toBe("hello");
+  });
+
+  test("preserves dots", () => {
+    expect(toSlug("v2.0")).toBe("v2.0");
+  });
+
+  test("simple name passes through", () => {
+    expect(toSlug("shopping")).toBe("shopping");
+  });
+});
+
+describe("validateCategoryName", () => {
+  test("valid names", () => {
+    expect(validateCategoryName("shopping")).toBeNull();
+    expect(validateCategoryName("work-tasks")).toBeNull();
+    expect(validateCategoryName("project.v2")).toBeNull();
+    expect(validateCategoryName("sprint_3")).toBeNull();
+    expect(validateCategoryName("A")).toBeNull();
+    expect(validateCategoryName("My Shopping List")).toBeNull();
+    expect(validateCategoryName("Sprint 3 Tasks")).toBeNull();
+  });
+
+  test("reserved names", () => {
+    expect(validateCategoryName("t")).toContain("reserved");
+    expect(validateCategoryName("w")).toContain("reserved");
+    expect(validateCategoryName("T")).toContain("reserved");
+    expect(validateCategoryName("W")).toContain("reserved");
+  });
+
+  test("empty name", () => {
+    expect(validateCategoryName("")).toContain("required");
+    expect(validateCategoryName("  ")).toContain("required");
+  });
+
+  test("name with only special chars", () => {
+    expect(validateCategoryName("!!!")).toContain("at least one letter");
+  });
+
+  test("too long", () => {
+    expect(validateCategoryName("a".repeat(101))).toContain("too long");
+  });
+});
+
+describe("validateTodosText", () => {
+  test("self-hosted skips validation", () => {
+    const huge = "[ ] " + "x".repeat(20000);
+    expect(validateTodosText(huge, true)).toBeNull();
+  });
+
+  test("valid document passes", () => {
+    const text = `## Section
+[ ] Todo 1
+[x] Todo 2`;
+    expect(validateTodosText(text, false)).toBeNull();
+  });
+
+  test("exceeds 10KB", () => {
+    const text = "[ ] " + "x".repeat(10240);
+    expect(validateTodosText(text, false)).toContain("10 KB");
+  });
+
+  test("exceeds 200 todos", () => {
+    const lines = Array.from({ length: 201 }, (_, i) => `[ ] Todo ${i + 1}`);
+    expect(validateTodosText(lines.join("\n"), false)).toContain("200");
+  });
+
+  test("200 todos is fine", () => {
+    const lines = Array.from({ length: 200 }, (_, i) => `[ ] Todo ${i + 1}`);
+    expect(validateTodosText(lines.join("\n"), false)).toBeNull();
+  });
+});

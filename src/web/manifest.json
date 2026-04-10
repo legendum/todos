@@ -1,0 +1,15 @@
+{
+  "name": "Todos",
+  "short_name": "Todos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/todos.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

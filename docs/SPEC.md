@@ -45,7 +45,7 @@ No passwords, no extra profile fields. Email = identity.
 A todo is a line of text with a done state. That's it.
 
 - **Format**: `[ ] Buy milk` (not done) or `[x] Buy milk` (done).
-- **Position** = line number. Line 1 is position 1.
+- **Position** = line number among todo lines (lines matching `[ ] ` or `[x] `). Position 1 is the first todo.
 - **No slugs, no IDs** in the external API. Todos are addressed by position or by their full text content.
 
 ### 2.4 The `todos.txt` format
@@ -53,16 +53,26 @@ A todo is a line of text with a done state. That's it.
 The canonical format for reading and writing todos. Used by the CLI, the webhook API, and content-negotiated responses.
 
 ```
+## Sprint 3
+Context: shipping by Friday
+
 [ ] Buy milk
 [x] Fix bug #42
 [ ] Deploy to prod
+
+## Backlog
+[ ] Refactor middleware
 ```
 
 Rules:
-- One todo per line.
-- Lines starting with `[x] ` are done; lines starting with `[ ] ` are not done.
-- Order = priority. First line is most important.
-- Empty lines and lines not matching the pattern are ignored.
+- Lines starting with `[x] ` are done; lines starting with `[ ] ` are not done. These are "todo lines."
+- All other lines (headings, blank lines, notes, context) are **free-form text** — preserved as-is, never modified by the server or CLI.
+- Order = priority. First todo line is most important.
+- Todo **position** is counted among todo lines only (skipping free-form text). Position 1 = first todo line in the document.
+
+Limits:
+- **Max document size**: 10 KB.
+- **Max todo lines**: 200 per category.
 
 ### 2.5 Drag and drop
 
@@ -104,7 +114,7 @@ The CLI maintains a local `todos.txt` file in the project directory. This file i
   - **Offline**: Apply the command to local `todos.txt` only. Next time the CLI can reach the server, it merges and syncs.
 - **Direct edits**: If an agent or user edits `todos.txt` by hand (adding lines, checking items off, reordering), the CLI picks up those changes on the next run and syncs them to the server.
 - **Merge strategy**:
-  1. **Union**: combine server and local todos, de-dup by exact text match.
+  1. **Union**: combine server and local todo lines, de-dup by exact text match. Free-form text lines are preserved from whichever side has them.
   2. **Done wins**: if either side marked a todo done, it stays done.
   3. **Order**: server's order as base, locally-added todos appended at the bottom.
   4. **Push** the merged result back via `PUT`.
@@ -124,8 +134,8 @@ External tools like chats2me access the authenticated API using a Legendum accou
 
 - `GET /` — list all categories
 - `GET /:category` — get todos (returns `todos.txt` format, or JSON via content negotiation)
-- `POST /:category` — append todos (body is `todos.txt` format lines to add)
 - `PUT /:category` — replace all todos (body is full `todos.txt` content)
+- `POST /:category` — same as PUT (replace all)
 - `DELETE /:category` — delete the category
 
 Responses support `.json`, `.txt` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
@@ -136,7 +146,7 @@ Responses support `.json`, `.txt` extensions for format selection. See `docs/tod
 
 **Hierarchy:** A user has categories; a category has todos.
 
-- **users**: `id` (PK), `email` (UNIQUE), `quota_basic` (default 100; reset every 7 days), `quota_extra` (default 0; for generous friends), `quota_reset` (Unix epoch of last reset), `legendum_token` (for Pay with Legendum), `created_at`.
+- **users**: `id` (PK), `email` (UNIQUE), `legendum_token` (for Legendum tabs billing), `created_at`.
 - **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.txt` content), `created_at`.
 
 That's it. Two tables. The `text` column stores the canonical `todos.txt` content — the server doesn't parse it into rows.
@@ -156,7 +166,7 @@ Schema: see `schema.sql`.
 - **Domain**: **todos.in**.
 - **CORS**: Open to `*` for API and webhook endpoints.
 - **No push notifications**: Todos does not implement FCM or push. If needed later, integrate with the Alert service.
-- **Self-hostable**: MIT license. Single binary (Bun), SQLite database. No config file required — just `bun run src/api/server.ts` with sensible defaults. If `LEGENDUM_API_KEY` is not set, assume self-hosted mode: skip Legendum auth/billing, disable quota enforcement, and serve todos without login. Install globally via `bun link`.
+- **Self-hostable**: MIT license. Single binary (Bun), SQLite database. No config file required — just `bun run src/api/server.ts` with sensible defaults. If `LEGENDUM_API_KEY` is not set, assume self-hosted mode: skip Legendum auth/billing, no size or todo limits, and serve todos without login. Install globally via `bun link`.
 
 ### Project structure
 
@@ -177,7 +187,6 @@ src/
 public/             # Static assets (logo, manifest, dist/)
   todos.png
 scripts/
-  reset-quota-weekly.ts
 docs/
   CONCEPT.md
   SPEC.md
@@ -194,32 +203,40 @@ tsconfig.json
 - Categories: create, list, delete. Store `todos.txt` content as a text column.
 - Serve and accept `todos.txt` format — via authenticated routes and public webhook.
 - Public webhook: `GET/POST/PUT /w/:ulid` — read/append/replace todos (no auth).
-- Quota consumption: each webhook write (POST/PUT) consumes one quota unit. Reads (GET) are free.
-- Weekly quota reset job (`scripts/reset-quota-weekly.ts`).
+- Billing via Legendum tabs: category creation and webhook writes charged via tabs.
 - Legendum link/unlink via Legendum middleware.
 
 ---
 
-## 5. Quota & billing
+## 5. Billing (Legendum tabs)
 
-### Quota pools
+All billing goes through **Legendum tabs** — no local quota tracking.
 
-- **quota_basic**: Free tier. 100 per 7-day rolling window. Reset by `scripts/reset-quota-weekly.ts` (run hourly via cron).
-- **quota_extra**: Extra credits (default 0). Can be granted manually.
-- **Legendum credits**: If user has `legendum_token` linked, charge 1 credit per webhook write when quota exhausted.
+### Costs
 
-### Consumption
+- **Category creation**: 2 credits.
+- **Webhook write** (PUT/POST on `/w/:ulid`): 0.1 credits.
+- **Reads** (GET on any endpoint): free.
+- **Authenticated writes** (PUT/POST on `/:category`): free (user is already paying for Legendum).
 
-- **Webhook writes** (POST/PUT on `/w/:ulid`) consume 1 quota unit.
-- **Webhook reads** (GET on `/w/:ulid`) are free and unlimited.
-- **Authenticated API calls** do not consume quota.
+### Tabs
+
+Legendum tabs allow micro-charges to accumulate until a threshold is reached, then settle as a single charge.
+
+- **Tab threshold**: 2 credits. When the running tab reaches 2 credits, it is charged to the user's Legendum account.
+- Tabs are managed by the Legendum SDK — the server calls `legendum.tabs.add(userId, amount, description)` and the SDK handles accumulation and settlement.
 
 ### Flow
 
-1. Check `quota_basic + quota_extra > 0`.
-2. If yes: decrement basic first, then extra.
-3. If no, and user has `legendum_token`: charge 1 Legendum credit.
-4. If no credits: return 429 (quota exceeded).
+1. User must have `legendum_token` linked to create categories or write via webhook.
+2. On category create: add 2 credits to the user's tab.
+3. On webhook write: add 0.1 credits to the user's tab.
+4. If the user has no linked Legendum account: return 402 (payment required).
+5. If the Legendum charge fails: return 429.
+
+### Self-hosted mode
+
+When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no limits on document size or todo count. Everything is free and unlimited.
 
 ---
 
@@ -247,13 +264,13 @@ All category routes support multiple response formats:
 - `GET /` — list all categories. Sorted by `position`.
 - `POST /` — create category. Body: `name` (required). Returns category with webhook URL.
 - `GET /:category` — get todos in category. Returns `todos.txt` format (or other format via content negotiation).
-- `POST /:category` — append todos. Body: `todos.txt` format lines to add.
-- `PUT /:category` — replace all todos. Body: full `todos.txt` content. This is the primary write API — the server diffs against current state and applies changes.
+- `PUT /:category` — replace all todos. Body: full `todos.txt` content. The server stores it verbatim.
+- `POST /:category` — same as PUT (replace all). Both accept the full document.
 - `DELETE /:category` — delete category and all its todos.
 
 ### Settings
 
-- `GET /t/settings/me` — return email, quota_basic, quota_extra, quota_reset, legendum_linked.
+- `GET /t/settings/me` — return email, legendum_linked.
 
 ### Public webhook (no auth, no API key)
 
@@ -266,10 +283,10 @@ The webhook URL is the only credential needed. No API keys, no bearer tokens. Th
 Endpoints:
 
 - `GET /w/:ulid` — get todos. Returns `todos.txt` format. **Free, no quota consumed.**
-- `POST /w/:ulid` — append todos. Body: `todos.txt` format lines to add. **Consumes 1 quota.**
-- `PUT /w/:ulid` — replace all todos. Body: full `todos.txt` content. **Consumes 1 quota.**
+- `PUT /w/:ulid` — replace all todos. Body: full `todos.txt` content. **Costs 0.1 credits (via tab).**
+- `POST /w/:ulid` — same as PUT (replace all). **Costs 0.1 credits (via tab).**
 
-Shared responses: **404** if category not found; **429** if quota exceeded.
+Shared responses: **404** if category not found; **402** if no Legendum account linked; **429** if charge fails.
 
 ### Server-Sent Events (SSE)
 
@@ -280,6 +297,7 @@ When todos change via any source (web UI, webhook, CLI), the server broadcasts t
 Event format:
 ```
 event: update
+data: ## Sprint 3
 data: [ ] Buy milk
 data: [x] Fix bug #42
 data: [ ] Deploy to prod
@@ -319,7 +337,7 @@ No config file required. All configuration via environment variables:
 
 ### 9.1 Categories list (main screen)
 
-- **Top bar**: Left = app logo; middle = Quota (single number: basic + extra); right = Settings icon.
+- **Top bar**: Left = app logo; right = Settings icon.
 - **Body**: List of categories, ordered by user-defined **position** (drag to reorder). Each row shows category **name** and todo **count** (e.g. "3/7" = 3 done of 7).
 - **"+"** button to create a new category.
 - **Swipe left** on a category row reveals **Delete**.
@@ -356,7 +374,7 @@ No config file required. All configuration via environment variables:
 
 ## 11. Scripts & cron
 
-- `scripts/reset-quota-weekly.ts` — reset `quota_basic` to 100 for users where `quota_reset` is ≥7 days old. Run hourly via cron.
+No cron jobs needed — billing is handled by Legendum tabs.
 
 ---
 
@@ -374,7 +392,7 @@ No config file required. All configuration via environment variables:
 
 - **Alert integration**: Optionally notify via Alert service when todos are added/completed.
 - **Native mobile apps**: Android and iOS via app stores.
-- **Payment**: Buy extra quota via Legendum.
+- **Payment**: Adjustable pricing tiers via Legendum.
 - **Sharing**: Share a category (read-only or read-write) with other users.
 - **Recurring todos**: Todos that reset on a schedule.
 
@@ -384,15 +402,14 @@ No config file required. All configuration via environment variables:
 
 - [ ] **DB**: Create `data/todos.db` from schema.sql (users, categories). Two tables only.
 - [ ] **Auth & Legendum**: Login/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget.
-- [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/POST/PUT/DELETE /:category`. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
-- [ ] **Webhook**: `GET/POST/PUT /w/:ulid` — public read/append/replace in `todos.txt` format; quota on writes.
+- [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
+- [ ] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.txt` format; PUT and POST identical; quota on writes.
 - [ ] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
-- [ ] **Quotas & billing**: Weekly reset job. Legendum credit charging fallback.
+- [ ] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
 - [ ] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware.
-- [ ] **Frontend — layout**: Top bar (logo, quota, settings); categories list ordered by position; mobile-first portrait PWA.
+- [ ] **Frontend — layout**: Top bar (logo, settings); categories list ordered by position; mobile-first portrait PWA.
 - [ ] **Frontend — screens**: Login; Categories list; Todo list per category; Settings; Create category.
 - [ ] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
 - [ ] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
 - [ ] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
 - [ ] **Agent skill**: `.claude/skills/todos.md` and `.cursorrules` — teach agents to use the `todos` CLI for task tracking.
-- [ ] **Scripts**: `reset-quota-weekly.ts`.
