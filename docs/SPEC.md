@@ -152,7 +152,7 @@ Responses support `.json`, `.txt` extensions for format selection. See `docs/tod
 
 That's it. Two tables. The `text` column stores the canonical `todos.txt` content — the server doesn't parse it into rows.
 
-Schema: see `schema.sql`.
+Schema: see `config/schema.sql`.
 
 ---
 
@@ -194,7 +194,9 @@ docs/
   CONCEPT.md
   SPEC.md
   todos.yaml        # chats2me tool manifest
-schema.sql
+config/
+  schema.sql
+  nginx.conf
 package.json        # bin: { "todos": "src/cli/main.ts" }
 biome.json
 tsconfig.json
@@ -407,16 +409,16 @@ No cron jobs needed — billing is handled by Legendum tabs.
 
 ## Checklist (implementation)
 
-- [ ] **DB**: Create `data/todos.db` from schema.sql (users, categories). Two tables only.
-- [ ] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
-- [ ] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
-- [ ] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.txt` format; PUT and POST identical; quota on writes.
-- [ ] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
-- [ ] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
-- [ ] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
-- [ ] **Frontend — layout**: Top bar (logo, settings); categories list ordered by position; mobile-first portrait PWA.
-- [ ] **Frontend — screens**: Login; Categories list; Todo list per category; Settings; Create category.
-- [ ] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
-- [ ] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
-- [ ] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
-- [ ] **Agent skill**: `.claude/skills/todos.md` and `.cursorrules` — teach agents to use the `todos` CLI for task tracking.
+- [x] **DB**: Create `data/todos.db` from config/schema.sql (users, categories). Two tables only.
+- [x] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
+- [x] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
+- [x] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.txt` format; PUT and POST identical; quota on writes.
+- [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
+- [x] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
+- [x] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
+- [x] **Frontend — layout**: Top bar (logo + install dialog); categories list ordered by position; mobile-first portrait PWA.
+- [x] **Frontend — screens**: Login; Categories list; Todo list per category; Install dialog.
+- [x] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
+- [x] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
+- [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
+- [x] **Agent skill**: `todos skill` installs `.claude/skills/todos.md` and `.cursor/rules/todos.mdc`.
