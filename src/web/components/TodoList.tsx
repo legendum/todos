@@ -72,6 +72,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [lines, setLines] = useState<Line[]>([]);
   const [newTodo, setNewTodo] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
   const [copied, setCopied] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
@@ -155,12 +156,20 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     ]);
   };
 
-  const saveEdit = (index: number, text: string) => {
-    if (!text.trim()) {
-      deleteLine(index);
+  const openEditDialog = (index: number) => {
+    setEditingIndex(index);
+    setEditText(lines[index].text);
+  };
+
+  const saveEdit = () => {
+    if (editingIndex === null) return;
+    const trimmed = editText.trim();
+    if (!trimmed) {
+      deleteLine(editingIndex);
     } else {
+      const idx = editingIndex;
       updateLines((prev) =>
-        prev.map((l, i) => (i === index ? { ...l, text: text.trim() } : l)),
+        prev.map((l, i) => (i === idx ? { ...l, text: trimmed } : l)),
       );
     }
     setEditingIndex(null);
@@ -293,12 +302,9 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
               <SortableLine
                 key={line.id}
                 line={line}
-                isEditing={editingIndex === index}
                 onToggle={() => toggleDone(index)}
                 onDelete={() => deleteLine(index)}
-                onEdit={() => setEditingIndex(index)}
-                onSaveEdit={(text) => saveEdit(index, text)}
-                onCancelEdit={() => setEditingIndex(null)}
+                onEdit={() => openEditDialog(index)}
               />
             ))}
           </SortableContext>
@@ -338,35 +344,79 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </button>
       </div>
 
+      {editingIndex !== null && (
+        <EditDialog
+          text={editText}
+          onChange={setEditText}
+          onSave={saveEdit}
+          onClose={() => setEditingIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditDialog({ text, onChange, onSave, onClose }: {
+  text: string;
+  onChange: (text: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <div className="dialog-overlay" onClick={onClose}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header">
+          <h2 style={{ margin: 0, fontSize: 18 }}>Edit todo</h2>
+          <button className="dialog-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="dialog-body">
+          <input
+            ref={inputRef}
+            className="input"
+            value={text}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") onSave(); }}
+            style={{ width: "100%" }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+            <button className="btn" style={{ background: "#334155" }} onClick={onClose}>Cancel</button>
+            <button className="btn" onClick={onSave}>Save</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 function SortableLine({
   line,
-  isEditing,
   onToggle,
   onDelete,
   onEdit,
-  onSaveEdit,
-  onCancelEdit,
 }: {
   line: Line;
-  isEditing: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
-  onSaveEdit: (text: string) => void;
-  onCancelEdit: () => void;
 }) {
-  const [editText, setEditText] = useState(line.text);
-  useEffect(() => { if (isEditing) setEditText(line.text); }, [isEditing, line.text]);
-
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: line.id });
-  const { sliderStyle, slideHandlers } = useSwipeToReveal({
-    onTap: line.isTodo ? onEdit : undefined,
-  });
+  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({ actionCount: 2 });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -383,21 +433,7 @@ function SortableLine({
       >
         {line.done && <CheckIcon />}
       </button>
-      {isEditing ? (
-        <input
-          className="todo-text-edit"
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          onBlur={() => onSaveEdit(editText)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            else if (e.key === "Escape") { setEditText(line.text); onCancelEdit(); }
-          }}
-          autoFocus
-        />
-      ) : (
-        <span className={`todo-text${line.done ? " done" : ""}`}>{line.text}</span>
-      )}
+      <span className={`todo-text${line.done ? " done" : ""}`}>{line.text}</span>
     </div>
   ) : (
     <div className="freeform-line" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -411,6 +447,7 @@ function SortableLine({
       <div className="row-wrap" style={{ borderBottom: "none" }}>
         <div className="row-slider" style={sliderStyle} {...slideHandlers}>
           <div className="row-main">{content}</div>
+          <button className="row-edit" onClick={() => { reset(); onEdit(); }}>Edit</button>
           <button className="row-delete" onClick={onDelete}>Delete</button>
         </div>
       </div>
