@@ -12,4 +12,4 @@ description: >-
 3. Edit `todos.txt`. Each todo line should start with either `[ ] some undone task` or `[x] some completed task`.
 4. Run `todos` again to push local changes to the server (if any).
 
-That’s it.
+That's it.

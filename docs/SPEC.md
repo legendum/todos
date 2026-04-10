@@ -122,7 +122,7 @@ The CLI maintains a local `todos.txt` file in the project directory. This file i
 
 ### 2.8 Agent skill (Claude Code / Cursor)
 
-A skill file (e.g. `.claude/skills/todos.md` or `.cursorrules`) that teaches agents about the `todos` CLI and encourages them to use it while working on a project:
+A skill file (e.g. `config/SKILL.md` installed to `~/.claude/skills/todos/SKILL.md` and `~/.cursor/skills/todos/SKILL.md`, or `.cursorrules`) that teaches agents about the `todos` CLI and encourages them to use it while working on a project:
 
 - Check `todos` at the start of a session to see outstanding work
 - Mark todos done as they're completed
@@ -422,4 +422,4 @@ No cron jobs needed — billing is handled by Legendum tabs.
 - [x] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
 - [x] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
 - [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
-- [x] **Agent skill**: `todos skill` installs `~/.claude/skills/todos.md` and `~/.cursor/skills/todos/SKILL.md`.
+- [x] **Agent skill**: `todos skill` copies `config/SKILL.md` to `~/.claude/skills/todos/SKILL.md` and `~/.cursor/skills/todos/SKILL.md`.

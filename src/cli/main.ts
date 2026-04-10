@@ -137,39 +137,39 @@ function printTodos(content: string): void {
   }
 }
 
-/** Install the todos skill file for Claude Code and Cursor. */
+/** Bundled skill text; copied to agent skill dirs by `todos skill`. */
+const SKILL_SOURCE_REL = join("config", "SKILL.md");
+
+/**
+ * Globally linked `todos` runs from `~/.config/todos/src`, so the skill is read from
+ * `~/.config/todos/src/config/SKILL.md` first. The `__dirname` fallback supports running
+ * the CLI directly (e.g. `bun src/cli/main.ts skill`) from any clone.
+ */
 function installSkill(): void {
-  // Find the skill source — either from the install dir or the repo
-  const installDir = join(process.env.HOME || "~", ".config/todos/src");
-  const repoDir = join(dirname(dirname(__dirname)));
-  const skillSource = [
-    join(installDir, ".claude/skills/todos.md"),
-    join(repoDir, ".claude/skills/todos.md"),
-  ].find(existsSync);
+  const home = process.env.HOME || "~";
+  const linkedInstallRoot = join(home, ".config/todos/src");
+  const cliRepoRoot = join(dirname(dirname(__dirname)));
+  const skillSource = [join(linkedInstallRoot, SKILL_SOURCE_REL), join(cliRepoRoot, SKILL_SOURCE_REL)].find(
+    existsSync,
+  );
 
   if (!skillSource) {
-    console.error("Could not find todos skill file. Is todos installed?");
+    console.error("Could not find config/SKILL.md (expected under ~/.config/todos/src or next to the CLI).");
     process.exit(1);
   }
 
-  const skill = readFileSync(skillSource, "utf-8");
-  let installed = 0;
+  const destinations = [
+    join(home, ".claude", "skills", "todos", "SKILL.md"),
+    join(home, ".cursor", "skills", "todos", "SKILL.md"),
+  ];
 
-  // Claude Code: ~/.claude/skills/todos.md
-  const claudePath = join(process.env.HOME || "~", ".claude/skills/todos.md");
-  mkdirSync(dirname(claudePath), { recursive: true });
-  writeFileSync(claudePath, skill);
-  console.log(`  Claude Code: ${claudePath}`);
-  installed++;
+  for (const dest of destinations) {
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(skillSource, dest);
+    console.log(`  ${dest}`);
+  }
 
-  // Cursor: ~/.cursor/skills/todos/SKILL.md
-  const cursorPath = join(process.env.HOME || "~", ".cursor/skills/todos/SKILL.md");
-  mkdirSync(dirname(cursorPath), { recursive: true });
-  writeFileSync(cursorPath, skill);
-  console.log(`  Cursor:      ${cursorPath}`);
-  installed++;
-
-  console.log(`\nInstalled todos skill for ${installed} agent(s).`);
+  console.log("\nInstalled todos skill for Claude Code and Cursor.");
 }
 
 async function main() {
