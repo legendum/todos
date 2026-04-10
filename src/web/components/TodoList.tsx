@@ -223,7 +223,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const draggedLine = activeDragId ? lines.find((l) => l.id === activeDragId) : null;
 
   return (
-    <div className="screen" style={{ display: "flex", flexDirection: "column", height: "100dvh", paddingBottom: 0 }}>
+    <div className="screen" style={{ display: "flex", flexDirection: "column", height: "100%", paddingBottom: 0 }}>
       <div className="screen-header">
         <button className="back-btn" onClick={onBack}>
           &#8592; Back
