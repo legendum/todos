@@ -422,4 +422,4 @@ No cron jobs needed — billing is handled by Legendum tabs.
 - [x] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
 - [x] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
 - [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
-- [x] **Agent skill**: `todos skill` installs `.claude/skills/todos.md` and `.cursor/rules/todos.mdc`.
+- [x] **Agent skill**: `todos skill` installs `~/.claude/skills/todos.md` and `~/.cursor/skills/todos/SKILL.md`.

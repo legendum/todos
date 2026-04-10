@@ -162,14 +162,12 @@ function installSkill(): void {
   console.log(`  Claude Code: ${claudePath}`);
   installed++;
 
-  // Cursor: ~/.cursor/rules/todos.mdc
-  const cursorPath = join(process.env.HOME || "~", ".cursor/rules/todos.mdc");
-  if (existsSync(join(process.env.HOME || "~", ".cursor"))) {
-    mkdirSync(dirname(cursorPath), { recursive: true });
-    writeFileSync(cursorPath, skill);
-    console.log(`  Cursor:      ${cursorPath}`);
-    installed++;
-  }
+  // Cursor: ~/.cursor/skills/todos/SKILL.md
+  const cursorPath = join(process.env.HOME || "~", ".cursor/skills/todos/SKILL.md");
+  mkdirSync(dirname(cursorPath), { recursive: true });
+  writeFileSync(cursorPath, skill);
+  console.log(`  Cursor:      ${cursorPath}`);
+  installed++;
 
   console.log(`\nInstalled todos skill for ${installed} agent(s).`);
 }

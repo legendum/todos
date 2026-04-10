@@ -1,3 +1,10 @@
+---
+name: todos
+description: >-
+  Use the todos CLI with todos.in: list, add, complete, and reorder todos via
+  TODOS_WEBHOOK in .env. Use at session start and when tracking project work.
+---
+
 # Todos — Agent Skill
 
 This project uses the `todos` CLI to track work via [todos.in](https://todos.in). The webhook URL is stored in `.env` as `TODOS_WEBHOOK`.
