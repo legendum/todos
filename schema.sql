@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS categories (
   slug       TEXT NOT NULL,
   position   INTEGER NOT NULL DEFAULT 0,
   text       TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
 -- Indexes

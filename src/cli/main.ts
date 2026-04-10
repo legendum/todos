@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -85,15 +85,14 @@ function getTodoLines(lines: ParsedLine[]): Array<{ index: number; todo: TodoLin
   return result;
 }
 
-/** Merge local and server content. */
-function merge(local: string, server: string): string {
+/** Merge local and server content. The newer side wins for done state. */
+function merge(local: string, server: string, localNewer: boolean): string {
   const localLines = parseContent(local);
   const serverLines = parseContent(server);
 
-  // Use server order as base
+  // Use server order as base, append local-only todos.
   const result = [...serverLines];
 
-  // Find local todos not in server (by text)
   const serverTexts = new Set(
     serverLines.filter((l) => l.isTodo).map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
   );
@@ -104,16 +103,16 @@ function merge(local: string, server: string): string {
     }
   }
 
-  // Done wins: if either side has a todo marked done, keep it done
-  const localDone = new Set(
-    localLines
-      .filter((l) => l.isTodo && (l as { isTodo: true; todo: TodoLine }).todo.done)
-      .map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
-  );
-
-  for (const line of result) {
-    if (line.isTodo && localDone.has(line.todo.text)) {
-      line.todo.done = true;
+  // The newer side wins for done state on shared todos.
+  if (localNewer) {
+    const localDone = new Map<string, boolean>();
+    for (const l of localLines) {
+      if (l.isTodo) localDone.set(l.todo.text, l.todo.done);
+    }
+    for (const line of result) {
+      if (line.isTodo && localDone.has(line.todo.text)) {
+        line.todo.done = localDone.get(line.todo.text)!;
+      }
     }
   }
 
@@ -157,11 +156,13 @@ async function main() {
 
   // Fetch server content
   let serverContent = "";
+  let serverUpdatedAt = 0;
   let online = true;
   try {
     const res = await fetch(webhookUrl, { method: "GET" });
     if (res.ok) {
       serverContent = await res.text();
+      serverUpdatedAt = Number(res.headers.get("X-Updated-At") || "0");
     } else {
       online = false;
     }
@@ -169,10 +170,17 @@ async function main() {
     online = false;
   }
 
-  // Merge
+  // Merge — newer side wins for done state
   let content: string;
   if (online) {
-    content = localContent ? merge(localContent, serverContent) : serverContent;
+    if (!localContent) {
+      content = serverContent;
+    } else {
+      const localMtime = existsSync(todosPath)
+        ? Math.floor(statSync(todosPath).mtimeMs / 1000)
+        : 0;
+      content = merge(localContent, serverContent, localMtime > serverUpdatedAt);
+    }
   } else {
     content = localContent;
     if (!online && args.length > 0) {

@@ -14,6 +14,7 @@ type CategoryRow = {
   position: number;
   text: string;
   created_at: number;
+  updated_at: number;
 };
 
 /** GET / — list all categories */
@@ -110,14 +111,17 @@ export function getTodos(req: Request, categorySlug: string, userId: number): Re
   }
 
   const row = db
-    .query("SELECT ulid, name, slug, text, position FROM categories WHERE user_id = ? AND slug = ?")
+    .query("SELECT ulid, name, slug, text, position, updated_at, created_at FROM categories WHERE user_id = ? AND slug = ?")
     .get(userId, slug) as CategoryRow | undefined;
 
   if (!row) return json({ error: "not_found" }, 404);
 
   if (format === "text") {
     return new Response(row.text, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Updated-At": String(row.updated_at ?? row.created_at),
+      },
     });
   }
 
@@ -130,6 +134,7 @@ export function getTodos(req: Request, categorySlug: string, userId: number): Re
       text: row.text,
       total,
       done,
+      updated_at: row.updated_at ?? row.created_at,
     });
   }
 
@@ -152,11 +157,12 @@ export async function replaceTodos(req: Request, categorySlug: string, userId: n
     return json({ error: "invalid_request", message: validationError }, 400);
   }
 
-  db.run("UPDATE categories SET text = ? WHERE id = ?", text, row.id);
+  const now = Math.floor(Date.now() / 1000);
+  db.run("UPDATE categories SET text = ?, updated_at = ? WHERE id = ?", text, now, row.id);
   broadcast(row.ulid, text);
 
   const { total, done } = countTodos(text);
-  return json({ name: row.name, slug: row.slug, ulid: row.ulid, text, total, done });
+  return json({ name: row.name, slug: row.slug, ulid: row.ulid, text, total, done, updated_at: now });
 }
 
 /** DELETE /:slug — delete category */

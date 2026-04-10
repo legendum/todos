@@ -10,12 +10,13 @@ type CategoryRow = {
   ulid: string;
   name: string;
   text: string;
+  updated_at: number;
 };
 
 function findByUlid(ulid: string): CategoryRow | undefined {
   const db = getDb();
   return db
-    .query("SELECT id, user_id, ulid, name, text FROM categories WHERE ulid = ?")
+    .query("SELECT id, user_id, ulid, name, text, updated_at FROM categories WHERE ulid = ?")
     .get(ulid) as CategoryRow | undefined;
 }
 
@@ -28,6 +29,7 @@ export function getWebhookTodos(ulid: string): Response {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
+      "X-Updated-At": String(row.updated_at),
     },
   });
 }
@@ -47,14 +49,16 @@ export async function replaceWebhookTodos(req: Request, ulid: string): Promise<R
     return json({ error: "invalid_request", message: validationError }, 400);
   }
 
+  const now = Math.floor(Date.now() / 1000);
   const db = getDb();
-  db.run("UPDATE categories SET text = ? WHERE id = ?", text, row.id);
+  db.run("UPDATE categories SET text = ?, updated_at = ? WHERE id = ?", text, now, row.id);
   broadcast(ulid, text);
 
   return new Response(text, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
+      "X-Updated-At": String(now),
     },
   });
 }

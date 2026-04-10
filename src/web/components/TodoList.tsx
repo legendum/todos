@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import DragHandle from "./DragHandle";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
@@ -77,7 +77,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState(category.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const sseRef = useRef<EventSource | null>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
@@ -92,18 +91,9 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       .then((text) => setLines(parseLines(text)))
       .catch(() => {});
 
-    // SSE for real-time updates
     const es = new EventSource(`/w/${category.ulid}/events`);
-    sseRef.current = es;
-
-    es.addEventListener("update", (event) => {
-      setLines(parseLines(event.data));
-    });
-
-    return () => {
-      es.close();
-      sseRef.current = null;
-    };
+    es.addEventListener("update", (e) => setLines(parseLines(e.data)));
+    return () => es.close();
   }, [category.slug, category.ulid]);
 
   /** Push current lines to server, debounced. */
@@ -196,10 +186,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     }
   };
 
-  const cancelEditName = () => {
-    setEditName(category.name);
-    setEditingName(false);
-  };
+  const cancelEditName = () => setEditingName(false);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveDragId(String(event.active.id));
@@ -295,7 +282,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
               <SortableLine
                 key={line.id}
                 line={line}
-                index={index}
                 isEditing={editingIndex === index}
                 onToggle={() => toggleDone(index)}
                 onDelete={() => deleteLine(index)}
@@ -347,7 +333,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
 
 function SortableLine({
   line,
-  index,
   isEditing,
   onToggle,
   onDelete,
@@ -356,7 +341,6 @@ function SortableLine({
   onCancelEdit,
 }: {
   line: Line;
-  index: number;
   isEditing: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -365,20 +349,10 @@ function SortableLine({
   onCancelEdit: () => void;
 }) {
   const [editText, setEditText] = useState(line.text);
-  const editInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (isEditing) setEditText(line.text); }, [isEditing, line.text]);
 
-  useEffect(() => {
-    if (isEditing) setEditText(line.text);
-  }, [isEditing, line.text]);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: line.id });
-
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: line.id });
   const { sliderStyle, slideHandlers } = useSwipeToReveal({
     onTap: line.isTodo ? onEdit : undefined,
   });
@@ -389,70 +363,44 @@ function SortableLine({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  if (!line.isTodo) {
-    return (
-      <div ref={setNodeRef} style={style} {...attributes}>
-        <div className="row-wrap" style={{ borderBottom: "none" }}>
-          <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-            <div className="row-main">
-              <div className="freeform-line" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <DragHandle listeners={listeners} />
-                <span>{line.text || "\u00A0"}</span>
-              </div>
-            </div>
-            <button className="row-delete" onClick={onDelete}>
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const content = line.isTodo ? (
+    <div className="todo-row">
+      <DragHandle listeners={listeners} />
+      <button
+        className={`todo-checkbox${line.done ? " checked" : ""}`}
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      >
+        {line.done && <CheckIcon />}
+      </button>
+      {isEditing ? (
+        <input
+          className="todo-text-edit"
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          onBlur={() => onSaveEdit(editText)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            else if (e.key === "Escape") { setEditText(line.text); onCancelEdit(); }
+          }}
+          autoFocus
+        />
+      ) : (
+        <span className={`todo-text${line.done ? " done" : ""}`}>{line.text}</span>
+      )}
+    </div>
+  ) : (
+    <div className="freeform-line" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <DragHandle listeners={listeners} />
+      <span>{line.text || "\u00A0"}</span>
+    </div>
+  );
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
       <div className="row-wrap" style={{ borderBottom: "none" }}>
         <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-          <div className="row-main">
-            <div className="todo-row">
-              <DragHandle listeners={listeners} />
-              <button
-                className={`todo-checkbox${line.done ? " checked" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle();
-                }}
-              >
-                {line.done && <CheckIcon />}
-              </button>
-              {isEditing ? (
-                <input
-                  ref={editInputRef}
-                  className="todo-text-edit"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onBlur={() => onSaveEdit(editText)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === "Escape") {
-                      setEditText(line.text);
-                      onCancelEdit();
-                    }
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <span className={`todo-text${line.done ? " done" : ""}`}>
-                  {line.text}
-                </span>
-              )}
-            </div>
-          </div>
-          <button className="row-delete" onClick={onDelete}>
-            Delete
-          </button>
+          <div className="row-main">{content}</div>
+          <button className="row-delete" onClick={onDelete}>Delete</button>
         </div>
       </div>
     </div>
