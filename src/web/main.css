@@ -360,6 +360,19 @@ body {
   text-decoration: line-through;
   color: #64748b;
 }
+.todo-text .text-inline-link {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.todo-text.done .text-inline-link {
+  color: #94a3b8;
+}
+.freeform-line .text-inline-link {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .todo-text-edit {
   flex: 1;
   min-width: 0;

@@ -62,6 +62,33 @@ function serializeLines(lines: Line[]): string {
     .join("\n") + "\n";
 }
 
+/** Split on http(s) URLs and render anchors that open in a new tab. */
+const URL_IN_TEXT = /(https?:\/\/[^\s]+)/g;
+
+function TextWithLinks({ text }: { text: string }) {
+  const parts = text.split(URL_IN_TEXT);
+  return (
+    <span className="text-with-links">
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-inline-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </span>
+  );
+}
+
 type Props = {
   category: Category;
   onBack: () => void;
@@ -319,11 +346,13 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                       {draggedLine.done && <CheckIcon />}
                     </button>
                     <span className={`todo-text${draggedLine.done ? " done" : ""}`}>
-                      {draggedLine.text}
+                      <TextWithLinks text={draggedLine.text} />
                     </span>
                   </div>
                 ) : (
-                  <div className="freeform-line">{draggedLine.text}</div>
+                  <div className="freeform-line">
+                    <TextWithLinks text={draggedLine.text} />
+                  </div>
                 )}
               </div>
             ) : null}
@@ -433,12 +462,14 @@ function SortableLine({
       >
         {line.done && <CheckIcon />}
       </button>
-      <span className={`todo-text${line.done ? " done" : ""}`}>{line.text}</span>
+      <span className={`todo-text${line.done ? " done" : ""}`}>
+        <TextWithLinks text={line.text} />
+      </span>
     </div>
   ) : (
     <div className="freeform-line" style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <DragHandle listeners={listeners} />
-      <span>{line.text || "\u00A0"}</span>
+      <span>{line.text ? <TextWithLinks text={line.text} /> : "\u00A0"}</span>
     </div>
   );
 

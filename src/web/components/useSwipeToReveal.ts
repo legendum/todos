@@ -47,6 +47,8 @@ export function useSwipeToReveal(options: { onTap?: () => void; actionCount?: nu
     if (target.closest?.("button.row-delete") || target.closest?.("button.row-edit")) return;
     if (target.closest?.(".drag-handle")) return;
     if (target.closest?.(".todo-checkbox")) return;
+    // Let inline links navigate; pointer capture + preventDefault would block clicks.
+    if (target.closest?.("a.text-inline-link")) return;
     if (e.pointerType === "mouse") e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragStart.current = { x: e.clientX, offset: offsetRef.current };
