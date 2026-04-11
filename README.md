@@ -155,7 +155,7 @@ Responses: `404` if not found, `402` if no Legendum account linked, `429` if cha
 Two tables only:
 
 - **users**: `id`, `email` (stable identity from Legendum), `legendum_token`, `created_at`.
-- **categories**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.txt`), `created_at`.
+- **categories**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.txt`), `created_at`, `updated_at`.
 
 The server stores `todos.txt` verbatim in the `text` column — it doesn't parse items into rows.
 
