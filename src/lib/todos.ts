@@ -1,4 +1,4 @@
-/** Count todo lines in a todos.txt document. */
+/** Count todo lines in a todos.md document. */
 export function countTodos(text: string): { total: number; done: number } {
   let total = 0;
   let done = 0;
@@ -11,8 +11,11 @@ export function countTodos(text: string): { total: number; done: number } {
   return { total, done };
 }
 
-/** Validate a todos.txt document against limits. Returns null if valid, or an error message. */
-export function validateTodosText(text: string, selfHosted: boolean): string | null {
+/** Validate a todos.md document against limits. Returns null if valid, or an error message. */
+export function validateTodosText(
+  text: string,
+  selfHosted: boolean,
+): string | null {
   if (selfHosted) return null;
 
   const bytes = new TextEncoder().encode(text).length;
@@ -33,10 +36,10 @@ export function toSlug(name: string): string {
   return name
     .trim()
     .toLowerCase()
-    .replace(/[\s_]+/g, "-")   // spaces and underscores → hyphens
+    .replace(/[\s_]+/g, "-") // spaces and underscores → hyphens
     .replace(/[^a-z0-9.-]/g, "") // strip anything else
-    .replace(/-+/g, "-")       // collapse multiple hyphens
-    .replace(/^-|-$/g, "");    // trim leading/trailing hyphens
+    .replace(/-+/g, "-") // collapse multiple hyphens
+    .replace(/^-|-$/g, ""); // trim leading/trailing hyphens
 }
 
 /** Reserved slugs that cannot be used. */

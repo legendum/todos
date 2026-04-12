@@ -2,7 +2,12 @@ import { chargeCategoryCreate } from "../../lib/billing.js";
 import { isSelfHosted } from "../../lib/mode.js";
 import { getDb } from "../../lib/db.js";
 import { broadcast } from "../../lib/sse.js";
-import { countTodos, toSlug, validateCategoryName, validateTodosText } from "../../lib/todos.js";
+import {
+  countTodos,
+  toSlug,
+  validateCategoryName,
+  validateTodosText,
+} from "../../lib/todos.js";
 import { ulid } from "../../lib/ulid.js";
 import { json } from "../json.js";
 
@@ -22,7 +27,9 @@ type CategoryRow = {
 export function listCategories(userId: number): Response {
   const db = getDb();
   const rows = db
-    .query("SELECT id, ulid, name, slug, position, text, created_at FROM categories WHERE user_id = ? ORDER BY position, id")
+    .query(
+      "SELECT id, ulid, name, slug, position, text, created_at FROM categories WHERE user_id = ? ORDER BY position, id",
+    )
     .all(userId) as CategoryRow[];
 
   const categories = rows.map((r) => {
@@ -41,7 +48,10 @@ export function listCategories(userId: number): Response {
 }
 
 /** POST / — create category */
-export async function createCategory(req: Request, userId: number): Promise<Response> {
+export async function createCategory(
+  req: Request,
+  userId: number,
+): Promise<Response> {
   let body: { name?: string };
   try {
     body = (await req.json()) as { name?: string };
@@ -51,7 +61,8 @@ export async function createCategory(req: Request, userId: number): Promise<Resp
 
   const name = body.name?.trim();
   const nameError = validateCategoryName(name || "");
-  if (nameError) return json({ error: "invalid_request", message: nameError }, 400);
+  if (nameError)
+    return json({ error: "invalid_request", message: nameError }, 400);
 
   const slug = toSlug(name!);
   const db = getDb();
@@ -61,7 +72,13 @@ export async function createCategory(req: Request, userId: number): Promise<Resp
     .query("SELECT 1 FROM categories WHERE user_id = ? AND slug = ?")
     .get(userId, slug);
   if (existing) {
-    return json({ error: "invalid_request", message: `A category with URL "${slug}" already exists` }, 400);
+    return json(
+      {
+        error: "invalid_request",
+        message: `A category with URL "${slug}" already exists`,
+      },
+      400,
+    );
   }
 
   // Charge for category creation
@@ -70,7 +87,9 @@ export async function createCategory(req: Request, userId: number): Promise<Resp
 
   // Get next position
   const maxPos = db
-    .query("SELECT COALESCE(MAX(position), -1) as max_pos FROM categories WHERE user_id = ?")
+    .query(
+      "SELECT COALESCE(MAX(position), -1) as max_pos FROM categories WHERE user_id = ?",
+    )
     .get(userId) as { max_pos: number };
 
   const id = ulid();
@@ -83,36 +102,46 @@ export async function createCategory(req: Request, userId: number): Promise<Resp
     maxPos.max_pos + 1,
   );
 
-  return json({
-    name,
-    slug,
-    ulid: id,
-    webhook_url: `/w/${id}`,
-    position: maxPos.max_pos + 1,
-  }, 201);
+  return json(
+    {
+      name,
+      slug,
+      ulid: id,
+      webhook_url: `/w/${id}`,
+      position: maxPos.max_pos + 1,
+    },
+    201,
+  );
 }
 
 /** GET /:slug — get todos (supports content negotiation) */
-export function getTodos(req: Request, categorySlug: string, userId: number): Response {
+export function getTodos(
+  req: Request,
+  categorySlug: string,
+  userId: number,
+): Response {
   const db = getDb();
 
   // Strip extension for content negotiation
   let format = "html";
   let slug = categorySlug;
-  if (slug.endsWith(".txt")) {
+  if (slug.endsWith(".md")) {
     format = "text";
-    slug = slug.slice(0, -4);
+    slug = slug.slice(0, -3);
   } else if (slug.endsWith(".json")) {
     format = "json";
     slug = slug.slice(0, -5);
   } else {
     const accept = req.headers.get("Accept") ?? "";
     if (accept.includes("application/json")) format = "json";
-    else if (accept.includes("text/plain")) format = "text";
+    else if (accept.includes("text/plain") || accept.includes("text/markdown"))
+      format = "text";
   }
 
   const row = db
-    .query("SELECT ulid, name, slug, text, position, updated_at, created_at FROM categories WHERE user_id = ? AND slug = ?")
+    .query(
+      "SELECT ulid, name, slug, text, position, updated_at, created_at FROM categories WHERE user_id = ? AND slug = ?",
+    )
     .get(userId, slug) as CategoryRow | undefined;
 
   if (!row) return json({ error: "not_found" }, 404);
@@ -120,7 +149,7 @@ export function getTodos(req: Request, categorySlug: string, userId: number): Re
   if (format === "text") {
     return new Response(row.text, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/markdown; charset=utf-8",
         "X-Updated-At": String(row.updated_at ?? row.created_at),
       },
     });
@@ -144,10 +173,16 @@ export function getTodos(req: Request, categorySlug: string, userId: number): Re
 }
 
 /** PUT or POST /:slug — replace all todos */
-export async function replaceTodos(req: Request, categorySlug: string, userId: number): Promise<Response> {
+export async function replaceTodos(
+  req: Request,
+  categorySlug: string,
+  userId: number,
+): Promise<Response> {
   const db = getDb();
   const row = db
-    .query("SELECT id, ulid, name, slug, text FROM categories WHERE user_id = ? AND slug = ?")
+    .query(
+      "SELECT id, ulid, name, slug, text FROM categories WHERE user_id = ? AND slug = ?",
+    )
     .get(userId, categorySlug) as CategoryRow | undefined;
 
   if (!row) return json({ error: "not_found" }, 404);
@@ -159,11 +194,24 @@ export async function replaceTodos(req: Request, categorySlug: string, userId: n
   }
 
   const now = Math.floor(Date.now() / 1000);
-  db.run("UPDATE categories SET text = ?, updated_at = ? WHERE id = ?", text, now, row.id);
+  db.run(
+    "UPDATE categories SET text = ?, updated_at = ? WHERE id = ?",
+    text,
+    now,
+    row.id,
+  );
   broadcast(row.ulid, text);
 
   const { total, done } = countTodos(text);
-  return json({ name: row.name, slug: row.slug, ulid: row.ulid, text, total, done, updated_at: now });
+  return json({
+    name: row.name,
+    slug: row.slug,
+    ulid: row.ulid,
+    text,
+    total,
+    done,
+    updated_at: now,
+  });
 }
 
 /** DELETE /:slug — delete category */
@@ -180,7 +228,11 @@ export function deleteCategory(categorySlug: string, userId: number): Response {
 }
 
 /** PATCH /:slug — rename category */
-export async function renameCategory(req: Request, categorySlug: string, userId: number): Promise<Response> {
+export async function renameCategory(
+  req: Request,
+  categorySlug: string,
+  userId: number,
+): Promise<Response> {
   let body: { name?: string };
   try {
     body = (await req.json()) as { name?: string };
@@ -190,7 +242,8 @@ export async function renameCategory(req: Request, categorySlug: string, userId:
 
   const name = body.name?.trim();
   const nameError = validateCategoryName(name || "");
-  if (nameError) return json({ error: "invalid_request", message: nameError }, 400);
+  if (nameError)
+    return json({ error: "invalid_request", message: nameError }, 400);
 
   const newSlug = toSlug(name!);
   const db = getDb();
@@ -207,17 +260,31 @@ export async function renameCategory(req: Request, categorySlug: string, userId:
       .query("SELECT 1 FROM categories WHERE user_id = ? AND slug = ?")
       .get(userId, newSlug);
     if (existing) {
-      return json({ error: "invalid_request", message: `A category with URL "${newSlug}" already exists` }, 400);
+      return json(
+        {
+          error: "invalid_request",
+          message: `A category with URL "${newSlug}" already exists`,
+        },
+        400,
+      );
     }
   }
 
-  db.run("UPDATE categories SET name = ?, slug = ? WHERE id = ?", name, newSlug, row.id);
+  db.run(
+    "UPDATE categories SET name = ?, slug = ? WHERE id = ?",
+    name,
+    newSlug,
+    row.id,
+  );
 
   return json({ name, slug: newSlug, old_slug: categorySlug });
 }
 
 /** PATCH /t/reorder — reorder categories */
-export async function reorderCategories(req: Request, userId: number): Promise<Response> {
+export async function reorderCategories(
+  req: Request,
+  userId: number,
+): Promise<Response> {
   let body: { order?: string[] };
   try {
     body = (await req.json()) as { order?: string[] };
@@ -226,11 +293,19 @@ export async function reorderCategories(req: Request, userId: number): Promise<R
   }
 
   if (!Array.isArray(body.order)) {
-    return json({ error: "invalid_request", message: "order must be an array of category slugs" }, 400);
+    return json(
+      {
+        error: "invalid_request",
+        message: "order must be an array of category slugs",
+      },
+      400,
+    );
   }
 
   const db = getDb();
-  const stmt = db.prepare("UPDATE categories SET position = ? WHERE user_id = ? AND slug = ?");
+  const stmt = db.prepare(
+    "UPDATE categories SET position = ? WHERE user_id = ? AND slug = ?",
+  );
 
   for (let i = 0; i < body.order.length; i++) {
     stmt.run(i, userId, body.order[i]);

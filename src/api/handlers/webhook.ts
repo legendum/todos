@@ -17,7 +17,9 @@ type CategoryRow = {
 function findByUlid(ulid: string): CategoryRow | undefined {
   const db = getDb();
   return db
-    .query("SELECT id, user_id, ulid, name, text, updated_at FROM categories WHERE ulid = ?")
+    .query(
+      "SELECT id, user_id, ulid, name, text, updated_at FROM categories WHERE ulid = ?",
+    )
     .get(ulid) as CategoryRow | undefined;
 }
 
@@ -28,7 +30,7 @@ export function getWebhookTodos(ulid: string): Response {
 
   return new Response(row.text, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "text/markdown; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "X-Updated-At": String(row.updated_at),
     },
@@ -36,7 +38,10 @@ export function getWebhookTodos(ulid: string): Response {
 }
 
 /** PUT or POST /w/:ulid — replace all todos */
-export async function replaceWebhookTodos(req: Request, ulid: string): Promise<Response> {
+export async function replaceWebhookTodos(
+  req: Request,
+  ulid: string,
+): Promise<Response> {
   const row = findByUlid(ulid);
   if (!row) return json({ error: "not_found" }, 404);
 
@@ -52,12 +57,17 @@ export async function replaceWebhookTodos(req: Request, ulid: string): Promise<R
 
   const now = Math.floor(Date.now() / 1000);
   const db = getDb();
-  db.run("UPDATE categories SET text = ?, updated_at = ? WHERE id = ?", text, now, row.id);
+  db.run(
+    "UPDATE categories SET text = ?, updated_at = ? WHERE id = ?",
+    text,
+    now,
+    row.id,
+  );
   broadcast(ulid, text);
 
   return new Response(text, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "text/markdown; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "X-Updated-At": String(now),
     },

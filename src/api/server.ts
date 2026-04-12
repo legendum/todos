@@ -33,7 +33,11 @@ const legendumMiddleware = legendumSdk.isConfigured()
       },
       setToken: async (_req: Request, accountToken: string, userId: string) => {
         const db = getDb();
-        db.run("UPDATE users SET legendum_token = ? WHERE id = ?", accountToken, userId);
+        db.run(
+          "UPDATE users SET legendum_token = ? WHERE id = ?",
+          accountToken,
+          userId,
+        );
       },
       clearToken: async (_req: Request, userId: string) => {
         const db = getDb();
@@ -49,7 +53,10 @@ const corsHeaders: HeadersInit = {
 };
 
 function addCors(res: Response): Response {
-  const r = new Response(res.body, { status: res.status, headers: res.headers });
+  const r = new Response(res.body, {
+    status: res.status,
+    headers: res.headers,
+  });
   for (const [k, v] of Object.entries(corsHeaders)) r.headers.set(k, v);
   return r;
 }
@@ -70,7 +77,9 @@ async function getBundleFilename(): Promise<string | null> {
 
 async function serveIndex(): Promise<Response> {
   const bundle = await getBundleFilename();
-  const scriptTag = bundle ? `<script type="module" src="/dist/${bundle}"></script>` : "";
+  const scriptTag = bundle
+    ? `<script type="module" src="/dist/${bundle}"></script>`
+    : "";
   const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -124,7 +133,8 @@ export default {
     const webhookMatch = path.match(/^\/w\/([A-Z0-9]{20,30})$/);
     if (webhookMatch) {
       const ulid = webhookMatch[1];
-      if (method === "GET") return addCors(webhookHandlers.getWebhookTodos(ulid));
+      if (method === "GET")
+        return addCors(webhookHandlers.getWebhookTodos(ulid));
       if (method === "PUT" || method === "POST") {
         res = await webhookHandlers.replaceWebhookTodos(req, ulid);
         return addCors(res);
@@ -147,7 +157,9 @@ export default {
     if (path === "/manifest.json") {
       const file = Bun.file(join(root, "src/web/manifest.json"));
       if (await file.exists()) {
-        return new Response(file, { headers: { "Content-Type": "application/manifest+json" } });
+        return new Response(file, {
+          headers: { "Content-Type": "application/manifest+json" },
+        });
       }
     }
     if (path === "/todos.png") {
@@ -172,7 +184,9 @@ export default {
     if (isSelfHosted()) {
       // Ensure a default user exists
       const db = getDb();
-      let user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number } | null;
+      let user = db.query("SELECT id FROM users LIMIT 1").get() as {
+        id: number;
+      } | null;
       if (!user) {
         db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
         user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
@@ -200,13 +214,24 @@ export default {
       }
 
       // Category routes
-      const catMatch = path.match(/^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(txt|json))?$/);
-      if (catMatch && !path.startsWith("/t/") && !path.startsWith("/w/") && !path.startsWith("/dist/")) {
+      const catMatch = path.match(
+        /^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(md|json))?$/,
+      );
+      if (
+        catMatch &&
+        !path.startsWith("/t/") &&
+        !path.startsWith("/w/") &&
+        !path.startsWith("/dist/")
+      ) {
         const catName = catMatch[1];
         const ext = catMatch[2];
 
         if (method === "GET") {
-          const result = categoryHandlers.getTodos(req, ext ? `${catName}.${ext}` : catName, userId);
+          const result = categoryHandlers.getTodos(
+            req,
+            ext ? `${catName}.${ext}` : catName,
+            userId,
+          );
           if (result === null) return await serveIndex();
           return addCors(result);
         }
@@ -275,13 +300,24 @@ export default {
     }
 
     // Category routes (authenticated)
-    const catMatch = path.match(/^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(txt|json))?$/);
-    if (catMatch && !path.startsWith("/t/") && !path.startsWith("/w/") && !path.startsWith("/dist/")) {
+    const catMatch = path.match(
+      /^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(md|json))?$/,
+    );
+    if (
+      catMatch &&
+      !path.startsWith("/t/") &&
+      !path.startsWith("/w/") &&
+      !path.startsWith("/dist/")
+    ) {
       const catName = catMatch[1];
       const ext = catMatch[2];
 
       if (method === "GET") {
-        const result = categoryHandlers.getTodos(req, ext ? `${catName}.${ext}` : catName, userId);
+        const result = categoryHandlers.getTodos(
+          req,
+          ext ? `${catName}.${ext}` : catName,
+          userId,
+        );
         if (result === null) return await serveIndex();
         return addCors(result);
       }

@@ -9,7 +9,7 @@ A minimal PWA: **create categories → manage todo lists via web UI, CLI, or web
 - **User signs up** via Login with Legendum (email-only OAuth).
 - **User creates categories** — each category is a named todo list with a unique webhook URL.
 - **User manages todos** — via the web UI, the `todos` CLI, or the webhook API.
-- **The canonical format is `todos.txt`** — a plain text file, one todo per line, human-readable and agent-friendly.
+- **The canonical format is `todos.md`** — a plain text file, one todo per line, human-readable and agent-friendly.
 
 ```
 [ ] Buy milk
@@ -17,7 +17,7 @@ A minimal PWA: **create categories → manage todo lists via web UI, CLI, or web
 [ ] Deploy to prod
 ```
 
-The server stores todos in SQLite but every API surface speaks this format. The CLI syncs a local `todos.txt` in the project repo.
+The server stores todos in SQLite but every API surface speaks this format. The CLI syncs a local `todos.md` in the project repo.
 
 ---
 
@@ -49,7 +49,7 @@ A todo is a line of text with a done state. That's it.
 - **Position** = line number among todo lines (lines matching `[ ] ` or `[x] `). Position 1 is the first todo.
 - **No slugs, no IDs** in the external API. Todos are addressed by position or by their full text content.
 
-### 2.4 The `todos.txt` format
+### 2.4 The `todos.md` format
 
 The canonical format for reading and writing todos. Used by the CLI, the webhook API, and content-negotiated responses.
 
@@ -83,7 +83,7 @@ Limits:
 
 ### 2.6 CLI: `todos` command
 
-A lightweight CLI that does two things: (1) syncs `todos.txt` with the server, and (2) provides easy commands to edit it. Every command syncs first, then edits, then syncs again. All commands reference todos by **line number** (numbered from 1).
+A lightweight CLI that does two things: (1) syncs `todos.md` with the server, and (2) provides easy commands to edit it. Every command syncs first, then edits, then syncs again. All commands reference todos by **line number** (numbered from 1).
 
 **Command parsing**: Commands like `done`, `del`, `first`, `last` only match when followed by numeric positions. `open` only matches with no arguments. Anything else is treated as a new todo. Examples: `todos open a restaurant` adds "open a restaurant"; `todos delete the evidence` adds "delete the evidence"; `todos del 4` deletes todo at position 4.
 
@@ -98,7 +98,7 @@ A lightweight CLI that does two things: (1) syncs `todos.txt` with the server, a
    - `todos last 2 5` — move todos at lines 2 and 5 to the bottom (2 before 5)
    - `todos open` — open `todos.in/<category>` in the default browser
    - `todos Buy milk` — any text that doesn't match a command is added as a new todo at the end
-4. **Output** is the `todos.txt` format, numbered:
+4. **Output** is the `todos.md` format, numbered:
    ```
    1. [ ] Buy milk
    2. [x] Fix bug #42
@@ -106,14 +106,14 @@ A lightweight CLI that does two things: (1) syncs `todos.txt` with the server, a
    ```
 5. **Install**: `bun link` in the repo makes `todos` available globally (via `bin` in package.json → `src/cli/main.ts`).
 
-### 2.7 Local `todos.txt` sync
+### 2.7 Local `todos.md` sync
 
-The CLI maintains a local `todos.txt` file in the project directory. This file is the local source of truth — agents and humans can edit it directly without using the CLI.
+The CLI maintains a local `todos.md` file in the project directory. This file is the local source of truth — agents and humans can edit it directly without using the CLI.
 
-- **Every command** starts by reading the current `todos.txt` from disk (respecting any manual edits), then:
-  - **Online**: Fetch the server's version (`GET /w/:ulid`), merge with local, apply the command, push back (`PUT /w/:ulid`), and write the result to `todos.txt`.
-  - **Offline**: Apply the command to local `todos.txt` only. Next time the CLI can reach the server, it merges and syncs.
-- **Direct edits**: If an agent or user edits `todos.txt` by hand (adding lines, checking items off, reordering), the CLI picks up those changes on the next run and syncs them to the server.
+- **Every command** starts by reading the current `todos.md` from disk (respecting any manual edits), then:
+  - **Online**: Fetch the server's version (`GET /w/:ulid`), merge with local, apply the command, push back (`PUT /w/:ulid`), and write the result to `todos.md`.
+  - **Offline**: Apply the command to local `todos.md` only. Next time the CLI can reach the server, it merges and syncs.
+- **Direct edits**: If an agent or user edits `todos.md` by hand (adding lines, checking items off, reordering), the CLI picks up those changes on the next run and syncs them to the server.
 - **Merge strategy**:
   1. **Union**: combine server and local todo lines, de-dup by exact text match. Free-form text lines are preserved from whichever side has them.
   2. **Done wins**: if either side marked a todo done, it stays done.
@@ -134,12 +134,12 @@ A skill file (e.g. `config/SKILL.md` installed to `~/.claude/skills/todos/SKILL.
 External tools like chats2me access the authenticated API using a Legendum account key (`lak_...`) as a bearer token. The API uses clean category-name routes matching the `todos.in/<name>` pattern:
 
 - `GET /` — list all categories
-- `GET /:category` — get todos (returns `todos.txt` format, or JSON via content negotiation)
-- `PUT /:category` — replace all todos (body is full `todos.txt` content)
+- `GET /:category` — get todos (returns `todos.md` format, or JSON via content negotiation)
+- `PUT /:category` — replace all todos (body is full `todos.md` content)
 - `POST /:category` — same as PUT (replace all)
 - `DELETE /:category` — delete the category
 
-Responses support `.json`, `.txt` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
+Responses support `.json`, `.md` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
 
 ---
 
@@ -148,9 +148,9 @@ Responses support `.json`, `.txt` extensions for format selection. See `docs/tod
 **Hierarchy:** A user has categories; a category has todos.
 
 - **users**: `id` (PK), `email` (UNIQUE, NOT NULL — stable identity from Legendum; `local@localhost` for self-hosted), `legendum_token` (account-service token for billing — updated on each login), `created_at`.
-- **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.txt` content), `created_at`.
+- **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.md` content), `created_at`.
 
-That's it. Two tables. The `text` column stores the canonical `todos.txt` content — the server doesn't parse it into rows.
+That's it. Two tables. The `text` column stores the canonical `todos.md` content — the server doesn't parse it into rows.
 
 Schema: see `config/schema.sql`.
 
@@ -205,8 +205,8 @@ tsconfig.json
 ### Backend responsibilities
 
 - Legendum OAuth login flow via Legendum SDK and middleware.
-- Categories: create, list, delete. Store `todos.txt` content as a text column.
-- Serve and accept `todos.txt` format — via authenticated routes and public webhook.
+- Categories: create, list, delete. Store `todos.md` content as a text column.
+- Serve and accept `todos.md` format — via authenticated routes and public webhook.
 - Public webhook: `GET/POST/PUT /w/:ulid` — read/append/replace todos (no auth).
 - Billing via Legendum tabs: category creation and webhook writes charged via tabs.
 - Legendum link/unlink via Legendum middleware.
@@ -261,15 +261,15 @@ When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no l
 All category routes support multiple response formats:
 
 - **HTML** — default for browsers (`Accept: text/html` or no extension). Returns the full PWA page.
-- **Text** — `Accept: text/plain` or `.txt` extension (e.g. `GET /shopping.txt`). Returns `todos.txt` format.
+- **Text** — `Accept: text/markdown` or `.md` extension (e.g. `GET /shopping.md`). Returns `todos.md` format.
 - **JSON** — `Accept: application/json` or `.json` extension.
 
 ### Categories & todos (auth)
 
 - `GET /` — list all categories. Sorted by `position`.
 - `POST /` — create category. Body: `name` (required). Returns category with webhook URL.
-- `GET /:category` — get todos in category. Returns `todos.txt` format (or other format via content negotiation).
-- `PUT /:category` — replace all todos. Body: full `todos.txt` content. The server stores it verbatim.
+- `GET /:category` — get todos in category. Returns `todos.md` format (or other format via content negotiation).
+- `PUT /:category` — replace all todos. Body: full `todos.md` content. The server stores it verbatim.
 - `POST /:category` — same as PUT (replace all). Both accept the full document.
 - `DELETE /:category` — delete category and all its todos.
 
@@ -287,8 +287,8 @@ The webhook URL is the only credential needed. No API keys, no bearer tokens. Th
 
 Endpoints:
 
-- `GET /w/:ulid` — get todos. Returns `todos.txt` format. **Free, no quota consumed.**
-- `PUT /w/:ulid` — replace all todos. Body: full `todos.txt` content. **Costs 0.1 credits (via tab).**
+- `GET /w/:ulid` — get todos. Returns `todos.md` format. **Free, no quota consumed.**
+- `PUT /w/:ulid` — replace all todos. Body: full `todos.md` content. **Costs 0.1 credits (via tab).**
 - `POST /w/:ulid` — same as PUT (replace all). **Costs 0.1 credits (via tab).**
 
 Shared responses: **404** if category not found; **402** if no Legendum account linked; **429** if charge fails.
@@ -297,7 +297,7 @@ Shared responses: **404** if category not found; **402** if no Legendum account 
 
 - `GET /w/:ulid/events` — SSE stream for a category (no auth, same access as webhook). The web UI uses this too (it knows the ULID from the category).
 
-When todos change via any source (web UI, webhook, CLI), the server broadcasts the updated `todos.txt` to all connected SSE clients.
+When todos change via any source (web UI, webhook, CLI), the server broadcasts the updated `todos.md` to all connected SSE clients.
 
 Event format:
 ```
@@ -412,14 +412,14 @@ No cron jobs needed — billing is handled by Legendum tabs.
 
 - [x] **DB**: Create `data/todos.db` from config/schema.sql (users, categories). Two tables only.
 - [x] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
-- [x] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.txt` stored as text column on categories.
-- [x] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.txt` format; PUT and POST identical; quota on writes.
-- [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.txt` on any change.
+- [x] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.md` stored as text column on categories.
+- [x] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.md` format; PUT and POST identical; quota on writes.
+- [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.md` on any change.
 - [x] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
 - [x] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
 - [x] **Frontend — layout**: Top bar (logo + install dialog); categories list ordered by position; mobile-first portrait PWA.
 - [x] **Frontend — screens**: Login; Categories list; Todo list per category; Install dialog.
 - [x] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
 - [x] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
-- [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.txt`.
+- [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.md`.
 - [x] **Agent skill**: `todos skill` copies `config/SKILL.md` to `~/.claude/skills/todos/SKILL.md` and `~/.cursor/skills/todos/SKILL.md`.

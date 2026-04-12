@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Categories: each category is a named todo list with a unique webhook URL.
 -- name: display name as typed by user (may contain spaces).
 -- slug: URL-safe version (lowercase, spaces/underscores → hyphens). Unique per user.
--- text: the raw todos.txt content (free-form text + todo lines).
+-- text: the raw todos.md content (free-form text + todo lines).
 -- position: user-defined ordering on the main screen.
 CREATE TABLE IF NOT EXISTS categories (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

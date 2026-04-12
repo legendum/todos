@@ -53,7 +53,7 @@ async function jsonPost(path: string, body: any) {
 async function textPut(path: string, body: string) {
   const res = await fetch(`${base}${path}`, {
     method: "PUT",
-    headers: { "Content-Type": "text/plain" },
+    headers: { "Content-Type": "text/markdown" },
     body,
   });
   return { status: res.status, body: await res.text(), json: () => res.json() };
@@ -127,7 +127,7 @@ describe("API — self-hosted mode", () => {
     const text = "## Shopping\n[ ] Milk\n[x] Bread\n[ ] Eggs";
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/markdown" },
       body: text,
     });
     expect(res.status).toBe(200);
@@ -136,8 +136,8 @@ describe("API — self-hosted mode", () => {
     expect(data.done).toBe(1);
   });
 
-  test("GET /:category.txt returns plain text", async () => {
-    const res = await fetch(`${base}/groceries.txt`);
+  test("GET /:category.md returns markdown", async () => {
+    const res = await fetch(`${base}/groceries.md`);
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain("[ ] Milk");
@@ -157,7 +157,7 @@ describe("API — self-hosted mode", () => {
     const text = "[ ] Only todo";
     const res = await fetch(`${base}/groceries`, {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/markdown" },
       body: text,
     });
     expect(res.status).toBe(200);
@@ -182,7 +182,7 @@ describe("API — self-hosted mode", () => {
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "PUT",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/markdown" },
       body: "[ ] Webhook todo\n[x] Webhook done",
     });
     expect(res.status).toBe(200);
@@ -199,7 +199,7 @@ describe("API — self-hosted mode", () => {
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/markdown" },
       body: "[ ] Via POST",
     });
     expect(res.status).toBe(200);
@@ -254,12 +254,12 @@ Context: we need to ship by Friday
 
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/markdown" },
       body: text,
     });
     expect(res.status).toBe(200);
 
-    const getRes = await fetch(`${base}/groceries.txt`);
+    const getRes = await fetch(`${base}/groceries.md`);
     const result = await getRes.text();
     expect(result).toBe(text);
     expect(result).toContain("## Sprint 3");

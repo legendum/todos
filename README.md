@@ -2,16 +2,16 @@
 
 **Minimal todos for humans and agents**
 
-todos.in is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.txt` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
+todos.in is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
 
 Self-hostable: the same codebase runs at todos.in and locally via `bun run start`. Without `LEGENDUM_API_KEY`, it skips auth and billing entirely.
 
 ## Features
 
-- **todos.txt format**: Plain text, one todo per line (`[ ]` / `[x]`). Free-form headings and notes are preserved verbatim.
+- **todos.md format**: Plain text, one todo per line (`[ ]` / `[x]`). Free-form headings and notes are preserved verbatim.
 - **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Service worker via `workbox-build` with version-based cache invalidation.
 - **Human and agent users**: Web UI for humans, webhook URLs for agents and scripts — no API keys required for webhooks.
-- **`todos` CLI**: Syncs a local `todos.txt` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
+- **`todos` CLI**: Syncs a local `todos.md` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
 - **Real-time updates**: SSE stream broadcasts changes so the web UI updates live as agents work.
 - **Drag and drop**: Reorder categories and todos directly in the UI.
 - **Legendum billing**: Micro-charges accumulated via Legendum tabs — 2 credits per category, 0.1 per webhook write.
@@ -64,9 +64,9 @@ todos               # list todos
 | `todos open` | Open `todos.in/<category>` in the default browser |
 | `todos skill` | Install the agent skill to `~/.claude/skills/todos/` and `~/.cursor/skills/todos/` |
 
-Every command syncs `todos.txt` with the server first, applies the edit, then syncs again. Direct edits to `todos.txt` by hand are picked up on the next run.
+Every command syncs `todos.md` with the server first, applies the edit, then syncs again. Direct edits to `todos.md` by hand are picked up on the next run.
 
-## The `todos.txt` format
+## The `todos.md` format
 
 ```
 ## Sprint 3
@@ -117,7 +117,7 @@ todos/
 
 ## API
 
-All category routes support content negotiation: HTML (browsers), `text/plain` / `.txt` (todos.txt format), `application/json` / `.json`.
+All category routes support content negotiation: HTML (browsers), `text/markdown` / `.md` (todos.md format), `application/json` / `.json`.
 
 ### Auth & Legendum
 
@@ -134,8 +134,8 @@ All category routes support content negotiation: HTML (browsers), `text/plain` /
 |-------|-------------|
 | `GET /` | List all categories (sorted by position) |
 | `POST /` | Create category (body: `name`) |
-| `GET /:category` | Get todos (`todos.txt`) |
-| `PUT /:category` | Replace all todos (body: full `todos.txt`) |
+| `GET /:category` | Get todos (`todos.md`) |
+| `PUT /:category` | Replace all todos (body: full `todos.md`) |
 | `POST /:category` | Same as `PUT` |
 | `DELETE /:category` | Delete category |
 
@@ -155,9 +155,9 @@ Responses: `404` if not found, `402` if no Legendum account linked, `429` if cha
 Two tables only:
 
 - **users**: `id`, `email` (stable identity from Legendum), `legendum_token`, `created_at`.
-- **categories**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.txt`), `created_at`, `updated_at`.
+- **categories**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.md`), `created_at`, `updated_at`.
 
-The server stores `todos.txt` verbatim in the `text` column — it doesn't parse items into rows.
+The server stores `todos.md` verbatim in the `text` column — it doesn't parse items into rows.
 
 Schema: [`config/schema.sql`](config/schema.sql).
 

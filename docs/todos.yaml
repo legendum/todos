@@ -22,12 +22,12 @@ auth:
 # Response format conventions:
 #   - Actions path:     append .md to the URL → service returns markdown
 #   - Model path:       append .json (or no extension) → service returns JSON
-#   - Text path:        append .txt → service returns todos.txt format
+#   - Text path:        append .md → service returns todos.md format
 
 # --------------------------------------------------------------------------
 # Tools
 # --------------------------------------------------------------------------
-# The API is todos.txt-centric. GET returns the list, POST appends,
+# The API is todos.md-centric. GET returns the list, POST appends,
 # PUT replaces the whole list. No per-item endpoints needed.
 
 tools:
@@ -56,7 +56,7 @@ tools:
 
   - id: replace_todos
     title: Replace todos
-    description: Replace all todos in a category (full todos.txt content)
+    description: Replace all todos in a category (full todos.md content)
     path: /{category}
     method: PUT
     expose: [actions, model]

@@ -1,10 +1,17 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, copyFileSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  statSync,
+  mkdirSync,
+  copyFileSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import { execSync } from "node:child_process";
 
-const TODOS_FILE = "todos.txt";
+const TODOS_FILE = "todos.md";
 
 /** Read TODOS_WEBHOOK from .env in the current directory. */
 function getWebhookUrl(): string | null {
@@ -47,9 +54,11 @@ function readLineSync(): string {
   return buf.toString("utf-8", 0, n).replace(/\n$/, "");
 }
 
-/** Parse todos.txt content into lines. */
+/** Parse todos.md content into lines. */
 type TodoLine = { done: boolean; text: string };
-type ParsedLine = { isTodo: true; todo: TodoLine } | { isTodo: false; raw: string };
+type ParsedLine =
+  | { isTodo: true; todo: TodoLine }
+  | { isTodo: false; raw: string };
 
 function parseContent(content: string): ParsedLine[] {
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
@@ -67,16 +76,20 @@ function parseContent(content: string): ParsedLine[] {
 
 function serializeContent(lines: ParsedLine[]): string {
   if (lines.length === 0) return "";
-  return lines
-    .map((l) => {
-      if (l.isTodo) return `${l.todo.done ? "[x]" : "[ ]"} ${l.todo.text}`;
-      return l.raw;
-    })
-    .join("\n") + "\n";
+  return (
+    lines
+      .map((l) => {
+        if (l.isTodo) return `${l.todo.done ? "[x]" : "[ ]"} ${l.todo.text}`;
+        return l.raw;
+      })
+      .join("\n") + "\n"
+  );
 }
 
 /** Get todo lines only (with their index in the full array). */
-function getTodoLines(lines: ParsedLine[]): Array<{ index: number; todo: TodoLine }> {
+function getTodoLines(
+  lines: ParsedLine[],
+): Array<{ index: number; todo: TodoLine }> {
   const result: Array<{ index: number; todo: TodoLine }> = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
@@ -94,7 +107,9 @@ function merge(local: string, server: string, localNewer: boolean): string {
   const result = [...serverLines];
 
   const serverTexts = new Set(
-    serverLines.filter((l) => l.isTodo).map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
+    serverLines
+      .filter((l) => l.isTodo)
+      .map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
   );
 
   for (const line of localLines) {
@@ -149,12 +164,15 @@ function installSkill(): void {
   const home = process.env.HOME || "~";
   const linkedInstallRoot = join(home, ".config/todos/src");
   const cliRepoRoot = join(dirname(dirname(__dirname)));
-  const skillSource = [join(linkedInstallRoot, SKILL_SOURCE_REL), join(cliRepoRoot, SKILL_SOURCE_REL)].find(
-    existsSync,
-  );
+  const skillSource = [
+    join(linkedInstallRoot, SKILL_SOURCE_REL),
+    join(cliRepoRoot, SKILL_SOURCE_REL),
+  ].find(existsSync);
 
   if (!skillSource) {
-    console.error("Could not find config/SKILL.md (expected under ~/.config/todos/src or next to the CLI).");
+    console.error(
+      "Could not find config/SKILL.md (expected under ~/.config/todos/src or next to the CLI).",
+    );
     process.exit(1);
   }
 
@@ -180,9 +198,12 @@ async function main() {
 
   const args = process.argv.slice(2);
   const command = args[0]?.toLowerCase();
-  const positions = args.slice(1).map(Number).filter((n) => !Number.isNaN(n) && n > 0);
+  const positions = args
+    .slice(1)
+    .map(Number)
+    .filter((n) => !Number.isNaN(n) && n > 0);
 
-  // Read local todos.txt
+  // Read local todos.md
   const todosPath = join(process.cwd(), TODOS_FILE);
   let localContent = "";
   if (existsSync(todosPath)) {
@@ -214,7 +235,11 @@ async function main() {
       const localMtime = existsSync(todosPath)
         ? Math.floor(statSync(todosPath).mtimeMs / 1000)
         : 0;
-      content = merge(localContent, serverContent, localMtime > serverUpdatedAt);
+      content = merge(
+        localContent,
+        serverContent,
+        localMtime > serverUpdatedAt,
+      );
     }
   } else {
     content = localContent;
@@ -242,10 +267,15 @@ async function main() {
         todos[pos - 1].todo.done = false;
       }
     }
-  } else if ((command === "del" || command === "delete") && positions.length > 0) {
+  } else if (
+    (command === "del" || command === "delete") &&
+    positions.length > 0
+  ) {
     const todos = getTodoLines(lines);
     const indicesToRemove = new Set(
-      positions.filter((p) => p >= 1 && p <= todos.length).map((p) => todos[p - 1].index),
+      positions
+        .filter((p) => p >= 1 && p <= todos.length)
+        .map((p) => todos[p - 1].index),
     );
     lines = lines.filter((_, i) => !indicesToRemove.has(i));
   } else if (command === "first" && positions.length > 0) {
@@ -300,7 +330,7 @@ async function main() {
     try {
       await fetch(webhookUrl, {
         method: "PUT",
-        headers: { "Content-Type": "text/plain" },
+        headers: { "Content-Type": "text/markdown" },
         body: content,
       });
     } catch {

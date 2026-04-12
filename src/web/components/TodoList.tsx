@@ -43,10 +43,22 @@ function parseLines(content: string): Line[] {
   if (!trimmed) return [];
   return trimmed.split("\n").map((raw, i) => {
     if (raw.startsWith("[ ] ")) {
-      return { id: `line-${i}`, raw, isTodo: true, done: false, text: raw.slice(4) };
+      return {
+        id: `line-${i}`,
+        raw,
+        isTodo: true,
+        done: false,
+        text: raw.slice(4),
+      };
     }
     if (raw.startsWith("[x] ")) {
-      return { id: `line-${i}`, raw, isTodo: true, done: true, text: raw.slice(4) };
+      return {
+        id: `line-${i}`,
+        raw,
+        isTodo: true,
+        done: true,
+        text: raw.slice(4),
+      };
     }
     return { id: `line-${i}`, raw, isTodo: false, done: false, text: raw };
   });
@@ -54,12 +66,14 @@ function parseLines(content: string): Line[] {
 
 function serializeLines(lines: Line[]): string {
   if (lines.length === 0) return "";
-  return lines
-    .map((l) => {
-      if (l.isTodo) return `${l.done ? "[x]" : "[ ]"} ${l.text}`;
-      return l.raw;
-    })
-    .join("\n") + "\n";
+  return (
+    lines
+      .map((l) => {
+        if (l.isTodo) return `${l.done ? "[x]" : "[ ]"} ${l.text}`;
+        return l.raw;
+      })
+      .join("\n") + "\n"
+  );
 }
 
 /** Split on http(s) URLs and render anchors that open in a new tab. */
@@ -117,15 +131,18 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     const todos = lines.filter((l) => l.isTodo);
     const done = todos.filter((l) => l.done).length;
     const total = todos.length;
-    document.title = total > 0
-      ? `${category.name} (${done}/${total}) — Todos`
-      : `${category.name} — Todos`;
-    return () => { document.title = "Todos"; };
+    document.title =
+      total > 0
+        ? `${category.name} (${done}/${total}) — Todos`
+        : `${category.name} — Todos`;
+    return () => {
+      document.title = "Todos";
+    };
   }, [category.name, lines]);
 
   // Fetch initial content and start SSE
   useEffect(() => {
-    fetch(`/${category.slug}.txt`, { credentials: "include" })
+    fetch(`/${category.slug}.md`, { credentials: "include" })
       .then((r) => r.text())
       .then((text) => setLines(parseLines(text)))
       .catch(() => {});
@@ -144,7 +161,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         fetch(`/${category.slug}`, {
           method: "PUT",
           credentials: "include",
-          headers: { "Content-Type": "text/plain" },
+          headers: { "Content-Type": "text/markdown" },
           body: text,
         });
       }, 300);
@@ -179,7 +196,13 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     setNewTodo("");
     updateLines((prev) => [
       ...prev,
-      { id: `line-${Date.now()}`, raw: `[ ] ${text}`, isTodo: true, done: false, text },
+      {
+        id: `line-${Date.now()}`,
+        raw: `[ ] ${text}`,
+        isTodo: true,
+        done: false,
+        text,
+      },
     ]);
   };
 
@@ -256,10 +279,20 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     pushToServer(next);
   }
 
-  const draggedLine = activeDragId ? lines.find((l) => l.id === activeDragId) : null;
+  const draggedLine = activeDragId
+    ? lines.find((l) => l.id === activeDragId)
+    : null;
 
   return (
-    <div className="screen" style={{ display: "flex", flexDirection: "column", height: "100%", paddingBottom: 0 }}>
+    <div
+      className="screen"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        paddingBottom: 0,
+      }}
+    >
       <div className="screen-header">
         <button className="back-btn" onClick={onBack}>
           &#8592; Back
@@ -342,10 +375,14 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                 {draggedLine.isTodo ? (
                   <div className="todo-row">
                     <DragHandle />
-                    <button className={`todo-checkbox${draggedLine.done ? " checked" : ""}`}>
+                    <button
+                      className={`todo-checkbox${draggedLine.done ? " checked" : ""}`}
+                    >
                       {draggedLine.done && <CheckIcon />}
                     </button>
-                    <span className={`todo-text${draggedLine.done ? " done" : ""}`}>
+                    <span
+                      className={`todo-text${draggedLine.done ? " done" : ""}`}
+                    >
                       <TextWithLinks text={draggedLine.text} />
                     </span>
                   </div>
@@ -385,7 +422,12 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   );
 }
 
-function EditDialog({ text, onChange, onSave, onClose }: {
+function EditDialog({
+  text,
+  onChange,
+  onSave,
+  onClose,
+}: {
   text: string;
   onChange: (text: string) => void;
   onSave: () => void;
@@ -411,7 +453,9 @@ function EditDialog({ text, onChange, onSave, onClose }: {
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <h2 style={{ margin: 0, fontSize: 18 }}>Edit todo</h2>
-          <button className="dialog-close" onClick={onClose}>&times;</button>
+          <button className="dialog-close" onClick={onClose}>
+            &times;
+          </button>
         </div>
         <div className="dialog-body">
           <input
@@ -419,12 +463,29 @@ function EditDialog({ text, onChange, onSave, onClose }: {
             className="input"
             value={text}
             onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onSave(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+            }}
             style={{ width: "100%" }}
           />
-          <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
-            <button className="btn" style={{ background: "#334155" }} onClick={onClose}>Cancel</button>
-            <button className="btn" onClick={onSave}>Save</button>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginTop: 12,
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              className="btn"
+              style={{ background: "#334155" }}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button className="btn" onClick={onSave}>
+              Save
+            </button>
           </div>
         </div>
       </div>
@@ -443,9 +504,17 @@ function SortableLine({
   onDelete: () => void;
   onEdit: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: line.id });
-  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({ actionCount: 2 });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: line.id });
+  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+    actionCount: 2,
+  });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -458,7 +527,10 @@ function SortableLine({
       <DragHandle listeners={listeners} />
       <button
         className={`todo-checkbox${line.done ? " checked" : ""}`}
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
       >
         {line.done && <CheckIcon />}
       </button>
@@ -467,7 +539,10 @@ function SortableLine({
       </span>
     </div>
   ) : (
-    <div className="freeform-line" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div
+      className="freeform-line"
+      style={{ display: "flex", alignItems: "center", gap: 8 }}
+    >
       <DragHandle listeners={listeners} />
       <span>{line.text ? <TextWithLinks text={line.text} /> : "\u00A0"}</span>
     </div>
@@ -478,8 +553,18 @@ function SortableLine({
       <div className="row-wrap" style={{ borderBottom: "none" }}>
         <div className="row-slider" style={sliderStyle} {...slideHandlers}>
           <div className="row-main">{content}</div>
-          <button className="row-edit" onClick={() => { reset(); onEdit(); }}>Edit</button>
-          <button className="row-delete" onClick={onDelete}>Delete</button>
+          <button
+            className="row-edit"
+            onClick={() => {
+              reset();
+              onEdit();
+            }}
+          >
+            Edit
+          </button>
+          <button className="row-delete" onClick={onDelete}>
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -488,7 +573,16 @@ function SortableLine({
 
 function CheckIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 7l3.5 3.5L12 3" />
     </svg>
   );
@@ -496,7 +590,14 @@ function CheckIcon() {
 
 function CopyIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
       <rect x="5" y="5" width="9" height="9" rx="1.5" />
       <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" />
     </svg>
