@@ -262,7 +262,7 @@ export default {
       !path.startsWith("/dist/") &&
       !path.match(/\.(md|json)$/);
 
-    if (isPageNavigation && path !== "/") {
+    if (isPageNavigation) {
       return await serveIndex();
     }
 

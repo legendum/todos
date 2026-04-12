@@ -35,6 +35,7 @@ type Line = {
   isTodo: boolean;
   done: boolean;
   text: string; // For todos: text after `[ ] ` or `[x] `. For free-form: the raw line.
+  indent?: string;
 };
 
 function parseLines(content: string): Line[] {
@@ -42,11 +43,12 @@ function parseLines(content: string): Line[] {
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
   if (!trimmed) return [];
   return trimmed.split("\n").map((raw, i) => {
-    const match = raw.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
+    const match = raw.match(/^(\s*)(?:[-*]?\s*)?\[([ xX])\]\s*(.*)$/);
     if (match) {
-      const done = match[1].toLowerCase() === "x";
-      const text = match[2];
-      return { id: `line-${i}`, raw, isTodo: true, done, text };
+      const indent = match[1];
+      const done = match[2].toLowerCase() === "x";
+      const text = match[3];
+      return { id: `line-${i}`, raw, isTodo: true, done, text, indent };
     }
     return { id: `line-${i}`, raw, isTodo: false, done: false, text: raw };
   });
@@ -56,7 +58,10 @@ function serializeLines(lines: Line[]): string {
   if (lines.length === 0) return "";
   return `${lines
     .map((l) => {
-      if (l.isTodo) return `${l.done ? "[x]" : "[ ]"} ${l.text}`;
+      if (l.isTodo) {
+        const indent = l.indent || "";
+        return `${indent}${l.done ? "[x]" : "[ ]"} ${l.text}`;
+      }
       return l.raw;
     })
     .join("\n")}\n`;
@@ -509,7 +514,10 @@ function SortableLine({
   };
 
   const content = line.isTodo ? (
-    <div className="todo-row">
+    <div
+      className="todo-row"
+      style={{ paddingLeft: `${(line.indent || "").length * 20}px` }}
+    >
       <DragHandle listeners={listeners} />
       <button
         className={`todo-checkbox${line.done ? " checked" : ""}`}
@@ -527,7 +535,12 @@ function SortableLine({
   ) : (
     <div
       className="freeform-line"
-      style={{ display: "flex", alignItems: "center", gap: 8 }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        paddingLeft: `${(line.indent || "").length * 20}px`,
+      }}
     >
       <DragHandle listeners={listeners} />
       <span>{line.text ? <TextWithLinks text={line.text} /> : "\u00A0"}</span>

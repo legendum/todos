@@ -59,3 +59,42 @@ export function validateCategoryName(name: string): string | null {
   if (isReservedSlug(slug)) return `"${name}" is a reserved name`;
   return null;
 }
+
+export interface TodoLine {
+  done: boolean;
+  text: string;
+  indent?: string;
+}
+
+export type ParsedLine =
+  | { isTodo: true; todo: TodoLine }
+  | { isTodo: false; raw: string };
+
+export function parseContent(content: string): ParsedLine[] {
+  const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
+  if (!trimmed) return [];
+  return trimmed.split("\n").map((line) => {
+    const match = line.match(/^(\s*)(?:[-*]?\s*)?\[([ xX])\]\s*(.*)$/);
+    if (match) {
+      const indent = match[1];
+      const done = match[2].toLowerCase() === "x";
+      const text = match[3];
+      return { isTodo: true, todo: { done, text, indent } };
+    }
+    return { isTodo: false, raw: line };
+  });
+}
+
+export function serializeContent(lines: ParsedLine[]): string {
+  if (lines.length === 0) return "";
+  return `${lines
+    .map((l) => {
+      if (l.isTodo) {
+        const indent = l.todo.indent || "";
+        const prefix = l.todo.done ? "[x]" : "[ ]";
+        return `${indent + prefix} ${l.todo.text}`;
+      }
+      return l.raw;
+    })
+    .join("\n")}\n`;
+}

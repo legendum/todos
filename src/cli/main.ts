@@ -10,6 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import type { ParsedLine, TodoLine } from "../lib/todos";
+import { parseContent, serializeContent } from "../lib/todos";
 
 const TODOS_FILE = "todos.md";
 
@@ -54,36 +56,6 @@ function readLineSync(): string {
   return buf.toString("utf-8", 0, n).replace(/\n$/, "");
 }
 
-/** Parse todos.md content into lines. */
-type TodoLine = { done: boolean; text: string };
-type ParsedLine =
-  | { isTodo: true; todo: TodoLine }
-  | { isTodo: false; raw: string };
-
-function parseContent(content: string): ParsedLine[] {
-  const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
-  if (!trimmed) return [];
-  return trimmed.split("\n").map((line) => {
-    const match = line.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
-    if (match) {
-      const done = match[1].toLowerCase() === "x";
-      const text = match[2];
-      return { isTodo: true, todo: { done, text } };
-    }
-    return { isTodo: false, raw: line };
-  });
-}
-
-function serializeContent(lines: ParsedLine[]): string {
-  if (lines.length === 0) return "";
-  return `${lines
-    .map((l) => {
-      if (l.isTodo) return `${l.todo.done ? "[x]" : "[ ]"} ${l.todo.text}`;
-      return l.raw;
-    })
-    .join("\n")}\n`;
-}
-
 /** Get todo lines only (with their index in the full array). */
 function getTodoLines(
   lines: ParsedLine[],
@@ -106,7 +78,9 @@ function printTodos(content: string): void {
     if (line.isTodo) {
       todoNum++;
       const prefix = line.todo.done ? "[x]" : "[ ]";
-      console.log(`${todoNum}. ${prefix} ${line.todo.text}`);
+      console.log(
+        `${line.todo.indent || ""}${todoNum}. ${prefix} ${line.todo.text}`,
+      );
     } else if (line.raw.trim()) {
       console.log(`   ${line.raw}`);
     }

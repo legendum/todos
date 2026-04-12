@@ -37,6 +37,7 @@ tools:
     path: /
     method: GET
     expose: [actions, model]
+    content_type: json
 
   - id: list_todos
     title: List todos
@@ -44,6 +45,7 @@ tools:
     path: /{category}
     method: GET
     expose: [actions, model]
+    content_type: markdown
     parameters:
       - name: category
         in: path
@@ -60,6 +62,7 @@ tools:
     path: /{category}
     method: PUT
     expose: [actions, model]
+    content_type: json
     parameters:
       - name: category
         in: path
@@ -81,6 +84,7 @@ tools:
     path: /{category}
     method: DELETE
     expose: [actions, model]
+    content_type: json
     parameters:
       - name: category
         in: path
