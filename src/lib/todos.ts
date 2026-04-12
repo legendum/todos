@@ -3,9 +3,10 @@ export function countTodos(text: string): { total: number; done: number } {
   let total = 0;
   let done = 0;
   for (const line of text.split("\n")) {
-    if (line.startsWith("[ ] ") || line.startsWith("[x] ")) {
+    const match = line.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
+    if (match) {
       total++;
-      if (line.startsWith("[x] ")) done++;
+      if (match[1].toLowerCase() === "x") done++;
     }
   }
   return { total, done };

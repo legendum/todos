@@ -274,4 +274,34 @@ Context: we need to ship by Friday
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
   });
+
+  test("markdown task list syntax supported by parser and countTodos", async () => {
+    const create = await jsonPost("/", { name: "markdown-test" });
+    expect(create.status).toBe(201);
+
+    const text = `## Markdown Test
+
+- [ ] task one
+* [x] task two
+
+Note with list
+- [ ] task three
+[x] bare task four`;
+
+    const putRes = await fetch(`${base}/markdown-test`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: text,
+    });
+    expect(putRes.status).toBe(200);
+    const data = await putRes.json();
+    expect(data.total).toBe(4);
+    expect(data.done).toBe(2);
+
+    const mdRes = await fetch(`${base}/markdown-test.md`);
+    const mdText = await mdRes.text();
+    expect(mdText).toBe(text);
+
+    await fetch(`${base}/markdown-test`, { method: "DELETE" });
+  });
 });

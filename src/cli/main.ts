@@ -97,36 +97,6 @@ function getTodoLines(
 }
 
 /** Merge local and server content. The newer side wins for done state. */
-function merge(local: string, server: string, localNewer: boolean): string {
-  const localLines = parseContent(local);
-  const serverLines = parseContent(server);
-  const baseLines = localNewer ? [...localLines] : [...serverLines];
-  const otherLines = localNewer ? serverLines : localLines;
-  const baseTexts = new Set(
-    baseLines
-      .filter((l) => l.isTodo)
-      .map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
-  );
-  for (const line of otherLines) {
-    if (line.isTodo && !baseTexts.has(line.todo.text)) baseLines.push(line);
-  }
-  const newerLines = localNewer ? localLines : serverLines;
-  const newerDone = new Map(
-    newerLines
-      .filter((l) => l.isTodo)
-      .map((l) => [
-        (l as { isTodo: true; todo: TodoLine }).todo.text,
-        (l as { isTodo: true; todo: TodoLine }).todo.done,
-      ]),
-  );
-  for (const line of baseLines) {
-    if (line.isTodo) {
-      const t = (line as { isTodo: true; todo: TodoLine }).todo.text;
-      if (newerDone.has(t)) line.todo.done = newerDone.get(t)!;
-    }
-  }
-  return serializeContent(baseLines);
-}
 
 /** Print todos with line numbers. */
 function printTodos(content: string): void {
@@ -220,24 +190,19 @@ async function main() {
     online = false;
   }
 
-  // Merge — newer side wins for done state
   let content: string;
   if (online) {
-    if (!localContent) {
+    const localMtime = existsSync(todosPath)
+      ? Math.floor(statSync(todosPath).mtimeMs / 1000)
+      : 0;
+    if (!localContent || localMtime <= serverUpdatedAt) {
       content = serverContent;
     } else {
-      const localMtime = existsSync(todosPath)
-        ? Math.floor(statSync(todosPath).mtimeMs / 1000)
-        : 0;
-      content = merge(
-        localContent,
-        serverContent,
-        localMtime > serverUpdatedAt,
-      );
+      content = localContent;
     }
   } else {
     content = localContent;
-    if (!online && args.length > 0) {
+    if (args.length > 0) {
       console.error("(offline — changes saved locally only)");
     }
   }
