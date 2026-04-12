@@ -259,14 +259,8 @@ export default {
       (req.headers.get("Accept") ?? "").includes("text/html") &&
       !path.startsWith("/t/") &&
       !path.startsWith("/w/") &&
-      !path.startsWith("/dist/");
-
-    if (path === "/" && method === "GET") {
-      const accept = req.headers.get("Accept") ?? "";
-      if (!accept.includes("application/json")) {
-        return await serveIndex();
-      }
-    }
+      !path.startsWith("/dist/") &&
+      !path.match(/\.(md|json)$/);
 
     if (isPageNavigation && path !== "/") {
       return await serveIndex();
