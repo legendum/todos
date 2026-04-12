@@ -16,6 +16,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ParsedLine } from "../../lib/todos";
+import { parseContent, serializeContent } from "../../lib/todos";
 import DragHandle from "./DragHandle";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
@@ -40,31 +42,44 @@ type Line = {
 
 function parseLines(content: string): Line[] {
   if (!content) return [];
-  const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
-  if (!trimmed) return [];
-  return trimmed.split("\n").map((raw, i) => {
-    const match = raw.match(/^(\s*)(?:[-*]?\s*)?\[([ xX])\]\s*(.*)$/);
-    if (match) {
-      const indent = match[1];
-      const done = match[2].toLowerCase() === "x";
-      const text = match[3];
-      return { id: `line-${i}`, raw, isTodo: true, done, text, indent };
+  return parseContent(content).map((p, i) => {
+    const id = `line-${i}`;
+    if (p.isTodo) {
+      const t = p.todo;
+      return {
+        id,
+        raw: p.raw,
+        isTodo: true,
+        done: t.done,
+        text: t.text,
+        indent: t.indent,
+      };
     }
-    return { id: `line-${i}`, raw, isTodo: false, done: false, text: raw };
+    return {
+      id,
+      raw: p.raw,
+      isTodo: false,
+      done: false,
+      text: p.raw,
+    };
   });
 }
 
 function serializeLines(lines: Line[]): string {
-  if (lines.length === 0) return "";
-  return `${lines
-    .map((l) => {
-      if (l.isTodo) {
-        const indent = l.indent || "";
-        return `${indent}${l.done ? "[x]" : "[ ]"} ${l.text}`;
-      }
-      return l.raw;
-    })
-    .join("\n")}\n`;
+  const mapped: ParsedLine[] = lines.map((l) => {
+    if (l.isTodo) {
+      return {
+        isTodo: true,
+        todo: { done: l.done, text: l.text, indent: l.indent },
+        raw: l.raw,
+      };
+    }
+    return {
+      isTodo: false,
+      raw: l.raw,
+    };
+  });
+  return serializeContent(mapped);
 }
 
 /** Split on http(s) URLs and render anchors that open in a new tab. */

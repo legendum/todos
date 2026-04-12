@@ -76,11 +76,14 @@ function printTodos(content: string): void {
   let todoNum = 0;
   for (const line of lines) {
     if (line.isTodo) {
-      todoNum++;
+      const indent = line.todo.indent || "";
       const prefix = line.todo.done ? "[x]" : "[ ]";
-      console.log(
-        `${line.todo.indent || ""}${todoNum}. ${prefix} ${line.todo.text}`,
-      );
+      if (indent.length === 0) {
+        todoNum++;
+        console.log(`${todoNum}. ${prefix} ${line.todo.text}`);
+      } else {
+        console.log(`${indent}${prefix} ${line.todo.text}`);
+      }
     } else if (line.raw.trim()) {
       console.log(`   ${line.raw}`);
     }
