@@ -44,7 +44,7 @@ export default function InstallDialog({ onClose }: Props) {
           <section className="dialog-section">
             <h3>3. Use it</h3>
             <pre className="dialog-code">
-{`todos              # list todos
+              {`todos              # list todos
 todos Buy milk     # add a todo
 todos done 1       # mark #1 as done
 todos undo 1       # mark #1 as not done

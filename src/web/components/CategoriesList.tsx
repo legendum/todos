@@ -82,7 +82,6 @@ export default function CategoriesList({ onSelect }: Props) {
     await fetchCategories();
   };
 
-
   function handleDragStart(event: DragStartEvent) {
     setActiveDragId(String(event.active.id));
   }
@@ -174,7 +173,11 @@ export default function CategoriesList({ onSelect }: Props) {
             <p style={{ color: "#f87171", fontSize: 13, margin: 0 }}>{error}</p>
           )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn" onClick={handleCreate} disabled={!newName.trim()}>
+            <button
+              className="btn"
+              onClick={handleCreate}
+              disabled={!newName.trim()}
+            >
               Create
             </button>
             <button

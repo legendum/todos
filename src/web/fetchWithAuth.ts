@@ -16,7 +16,12 @@ if (typeof window !== "undefined") {
     else if (input instanceof URL) url = input.pathname;
     else if (input instanceof Request) url = input.url;
 
-    if (response.status === 401 && onUnauthorized && url && !url.startsWith("/auth/")) {
+    if (
+      response.status === 401 &&
+      onUnauthorized &&
+      url &&
+      !url.startsWith("/auth/")
+    ) {
       onUnauthorized();
     }
     return response;

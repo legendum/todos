@@ -18,7 +18,9 @@ export function getAuthUserId(req: Request): number | null {
 }
 
 /** Resolve a Bearer token (lak_...) to a user ID by looking up legendum_token. */
-export async function getAuthUserIdWithBearer(req: Request): Promise<number | null> {
+export async function getAuthUserIdWithBearer(
+  req: Request,
+): Promise<number | null> {
   // Cookie first
   const cookieId = getAuthUserId(req);
   if (cookieId) return cookieId;
@@ -39,9 +41,9 @@ export async function getAuthUserIdWithBearer(req: Request): Promise<number | nu
 
     const db = getDb();
     // Find user by email (stable identity)
-    const row = db
-      .query("SELECT id FROM users WHERE email = ?")
-      .get(email) as { id: number } | undefined;
+    const row = db.query("SELECT id FROM users WHERE email = ?").get(email) as
+      | { id: number }
+      | undefined;
     if (!row) return null;
 
     // Update billing token
@@ -60,7 +62,9 @@ export function requireAuth(req: Request): { userId: number } | Response {
   return { userId };
 }
 
-export async function requireAuthAsync(req: Request): Promise<{ userId: number } | Response> {
+export async function requireAuthAsync(
+  req: Request,
+): Promise<{ userId: number } | Response> {
   const userId = await getAuthUserIdWithBearer(req);
   if (!userId) {
     return json({ error: "unauthorized", message: "Not authenticated" }, 401);

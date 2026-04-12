@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
-import { getDb } from "../lib/db.js";
 import { closeTabs } from "../lib/billing.js";
+import { getDb } from "../lib/db.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
-import { requireAuth, requireAuthAsync } from "./auth-middleware.js";
+import { requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
 const root = resolve(import.meta.dir, "../..");

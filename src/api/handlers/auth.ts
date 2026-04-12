@@ -1,4 +1,8 @@
-import { clearAuthCookieHeader, getDomain, setAuthCookieHeader } from "../../lib/auth.js";
+import {
+  clearAuthCookieHeader,
+  getDomain,
+  setAuthCookieHeader,
+} from "../../lib/auth.js";
 import { getDb } from "../../lib/db.js";
 import { json } from "../json.js";
 
@@ -43,7 +47,10 @@ export async function getCallback(req: Request): Promise<Response> {
   const state = url.searchParams.get("state");
 
   if (!code || !state) {
-    return json({ error: "invalid_request", message: "Missing code or state" }, 400);
+    return json(
+      { error: "invalid_request", message: "Missing code or state" },
+      400,
+    );
   }
 
   const cookie = req.headers.get("Cookie") ?? "";
@@ -67,7 +74,10 @@ export async function getCallback(req: Request): Promise<Response> {
   const { email } = data;
 
   if (!email) {
-    return json({ error: "auth_failed", message: "Could not read email from Legendum" }, 400);
+    return json(
+      { error: "auth_failed", message: "Could not read email from Legendum" },
+      400,
+    );
   }
 
   const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
@@ -78,17 +88,26 @@ export async function getCallback(req: Request): Promise<Response> {
   } | null;
 
   if (!user) {
-    db.run("INSERT INTO users (email, legendum_token) VALUES (?, ?)", email, serviceToken);
+    db.run(
+      "INSERT INTO users (email, legendum_token) VALUES (?, ?)",
+      email,
+      serviceToken,
+    );
     user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
       id: number;
     };
   } else if (serviceToken) {
     // Update billing token (may change across devices/sessions)
-    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", serviceToken, user.id);
+    db.run(
+      "UPDATE users SET legendum_token = ? WHERE id = ?",
+      serviceToken,
+      user.id,
+    );
   }
 
   const sessionCookie = setAuthCookieHeader(user.id);
-  const clearState = "todos_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+  const clearState =
+    "todos_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
 
   return new Response(null, {
     status: 302,

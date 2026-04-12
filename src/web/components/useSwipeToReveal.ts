@@ -13,7 +13,9 @@ export type SwipeToRevealResult = {
   };
 };
 
-export function useSwipeToReveal(options: { onTap?: () => void; actionCount?: number } = {}): SwipeToRevealResult {
+export function useSwipeToReveal(
+  options: { onTap?: () => void; actionCount?: number } = {},
+): SwipeToRevealResult {
   const { onTap, actionCount = 1 } = options;
   const actionsWidth = BUTTON_WIDTH * actionCount;
   const snapThreshold = actionsWidth / 2;
@@ -44,7 +46,11 @@ export function useSwipeToReveal(options: { onTap?: () => void; actionCount?: nu
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     movedEnough.current = false;
     const target = e.target as HTMLElement;
-    if (target.closest?.("button.row-delete") || target.closest?.("button.row-edit")) return;
+    if (
+      target.closest?.("button.row-delete") ||
+      target.closest?.("button.row-edit")
+    )
+      return;
     if (target.closest?.(".drag-handle")) return;
     if (target.closest?.(".todo-checkbox")) return;
     // Let inline links navigate; pointer capture + preventDefault would block clicks.
@@ -64,7 +70,10 @@ export function useSwipeToReveal(options: { onTap?: () => void; actionCount?: nu
       }
       const dx = e.clientX - dragStart.current.x;
       if (Math.abs(dx) > 5) movedEnough.current = true;
-      const next = Math.max(-actionsWidth, Math.min(0, dragStart.current.offset + dx));
+      const next = Math.max(
+        -actionsWidth,
+        Math.min(0, dragStart.current.offset + dx),
+      );
       setOffset(next);
     },
     [onPointerUp],

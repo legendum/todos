@@ -24,14 +24,21 @@ function getSlugFromPath(): string | null {
   if (path === "/" || path === "") return null;
   // Strip leading slash, ignore paths starting with t/ or w/ or dist/
   const slug = path.slice(1);
-  if (slug.startsWith("t/") || slug.startsWith("w/") || slug.startsWith("dist/")) return null;
+  if (
+    slug.startsWith("t/") ||
+    slug.startsWith("w/") ||
+    slug.startsWith("dist/")
+  )
+    return null;
   return slug || null;
 }
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+    null,
+  );
   const isSelfHosted = user ? !user.legendum_linked : false;
 
   const fetchUser = useCallback(async () => {
@@ -68,7 +75,7 @@ export default function App() {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data && data.slug) {
+        if (data?.slug) {
           setSelectedCategory({
             name: data.name,
             slug: data.slug,
@@ -95,7 +102,7 @@ export default function App() {
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
-            if (data && data.slug) {
+            if (data?.slug) {
               setSelectedCategory({
                 name: data.name,
                 slug: data.slug,
@@ -144,7 +151,9 @@ export default function App() {
         category={selectedCategory}
         onBack={goBack}
         onRenamed={({ name, slug }) => {
-          setSelectedCategory((prev) => prev ? { ...prev, name, slug } : null);
+          setSelectedCategory((prev) =>
+            prev ? { ...prev, name, slug } : null,
+          );
           window.history.replaceState(null, "", `/${slug}`);
         }}
       />

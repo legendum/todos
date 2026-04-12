@@ -42,23 +42,11 @@ function parseLines(content: string): Line[] {
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
   if (!trimmed) return [];
   return trimmed.split("\n").map((raw, i) => {
-    if (raw.startsWith("[ ] ")) {
-      return {
-        id: `line-${i}`,
-        raw,
-        isTodo: true,
-        done: false,
-        text: raw.slice(4),
-      };
-    }
-    if (raw.startsWith("[x] ")) {
-      return {
-        id: `line-${i}`,
-        raw,
-        isTodo: true,
-        done: true,
-        text: raw.slice(4),
-      };
+    const match = raw.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
+    if (match) {
+      const done = match[1].toLowerCase() === "x";
+      const text = match[2];
+      return { id: `line-${i}`, raw, isTodo: true, done, text };
     }
     return { id: `line-${i}`, raw, isTodo: false, done: false, text: raw };
   });
@@ -66,14 +54,12 @@ function parseLines(content: string): Line[] {
 
 function serializeLines(lines: Line[]): string {
   if (lines.length === 0) return "";
-  return (
-    lines
-      .map((l) => {
-        if (l.isTodo) return `${l.done ? "[x]" : "[ ]"} ${l.text}`;
-        return l.raw;
-      })
-      .join("\n") + "\n"
-  );
+  return `${lines
+    .map((l) => {
+      if (l.isTodo) return `${l.done ? "[x]" : "[ ]"} ${l.text}`;
+      return l.raw;
+    })
+    .join("\n")}\n`;
 }
 
 /** Split on http(s) URLs and render anchors that open in a new tab. */

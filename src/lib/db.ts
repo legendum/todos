@@ -8,7 +8,10 @@ let db: Database | null = null;
 
 export function getDb(): Database {
   if (!db) {
-    const path = resolve(ROOT_DIR, process.env.TODOS_DB_PATH || "data/todos.db");
+    const path = resolve(
+      ROOT_DIR,
+      process.env.TODOS_DB_PATH || "data/todos.db",
+    );
     mkdirSync(dirname(path), { recursive: true });
     db = new Database(path, { create: true });
     db.run("PRAGMA journal_mode = WAL");

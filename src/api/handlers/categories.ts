@@ -1,6 +1,6 @@
 import { chargeCategoryCreate } from "../../lib/billing.js";
-import { isSelfHosted } from "../../lib/mode.js";
 import { getDb } from "../../lib/db.js";
+import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast } from "../../lib/sse.js";
 import {
   countTodos,

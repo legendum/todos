@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
 
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  statSync,
-  mkdirSync,
-  copyFileSync,
-} from "node:fs";
-import { join, dirname } from "node:path";
 import { execSync } from "node:child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 const TODOS_FILE = "todos.md";
 
@@ -64,11 +64,11 @@ function parseContent(content: string): ParsedLine[] {
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
   if (!trimmed) return [];
   return trimmed.split("\n").map((line) => {
-    if (line.startsWith("[ ] ")) {
-      return { isTodo: true, todo: { done: false, text: line.slice(4) } };
-    }
-    if (line.startsWith("[x] ")) {
-      return { isTodo: true, todo: { done: true, text: line.slice(4) } };
+    const match = line.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
+    if (match) {
+      const done = match[1].toLowerCase() === "x";
+      const text = match[2];
+      return { isTodo: true, todo: { done, text } };
     }
     return { isTodo: false, raw: line };
   });
@@ -76,14 +76,12 @@ function parseContent(content: string): ParsedLine[] {
 
 function serializeContent(lines: ParsedLine[]): string {
   if (lines.length === 0) return "";
-  return (
-    lines
-      .map((l) => {
-        if (l.isTodo) return `${l.todo.done ? "[x]" : "[ ]"} ${l.todo.text}`;
-        return l.raw;
-      })
-      .join("\n") + "\n"
-  );
+  return `${lines
+    .map((l) => {
+      if (l.isTodo) return `${l.todo.done ? "[x]" : "[ ]"} ${l.todo.text}`;
+      return l.raw;
+    })
+    .join("\n")}\n`;
 }
 
 /** Get todo lines only (with their index in the full array). */
@@ -102,36 +100,32 @@ function getTodoLines(
 function merge(local: string, server: string, localNewer: boolean): string {
   const localLines = parseContent(local);
   const serverLines = parseContent(server);
-
-  // Use server order as base, append local-only todos.
-  const result = [...serverLines];
-
-  const serverTexts = new Set(
-    serverLines
+  const baseLines = localNewer ? [...localLines] : [...serverLines];
+  const otherLines = localNewer ? serverLines : localLines;
+  const baseTexts = new Set(
+    baseLines
       .filter((l) => l.isTodo)
       .map((l) => (l as { isTodo: true; todo: TodoLine }).todo.text),
   );
-
-  for (const line of localLines) {
-    if (line.isTodo && !serverTexts.has(line.todo.text)) {
-      result.push(line);
+  for (const line of otherLines) {
+    if (line.isTodo && !baseTexts.has(line.todo.text)) baseLines.push(line);
+  }
+  const newerLines = localNewer ? localLines : serverLines;
+  const newerDone = new Map(
+    newerLines
+      .filter((l) => l.isTodo)
+      .map((l) => [
+        (l as { isTodo: true; todo: TodoLine }).todo.text,
+        (l as { isTodo: true; todo: TodoLine }).todo.done,
+      ]),
+  );
+  for (const line of baseLines) {
+    if (line.isTodo) {
+      const t = (line as { isTodo: true; todo: TodoLine }).todo.text;
+      if (newerDone.has(t)) line.todo.done = newerDone.get(t)!;
     }
   }
-
-  // The newer side wins for done state on shared todos.
-  if (localNewer) {
-    const localDone = new Map<string, boolean>();
-    for (const l of localLines) {
-      if (l.isTodo) localDone.set(l.todo.text, l.todo.done);
-    }
-    for (const line of result) {
-      if (line.isTodo && localDone.has(line.todo.text)) {
-        line.todo.done = localDone.get(line.todo.text)!;
-      }
-    }
-  }
-
-  return serializeContent(result);
+  return serializeContent(baseLines);
 }
 
 /** Print todos with line numbers. */

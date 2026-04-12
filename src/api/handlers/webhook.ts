@@ -1,8 +1,8 @@
 import { chargeWebhookWrite } from "../../lib/billing.js";
-import { isSelfHosted } from "../../lib/mode.js";
 import { getDb } from "../../lib/db.js";
+import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast, subscribe } from "../../lib/sse.js";
-import { countTodos, validateTodosText } from "../../lib/todos.js";
+import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
 
 type CategoryRow = {

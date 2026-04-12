@@ -30,17 +30,16 @@ export default function TopBar({ isSelfHosted }: Props) {
 
   const legendumLinked = linkState.status === "linked";
   const lowCredits =
-    legendumLinked &&
-    linkState.balance !== null &&
-    linkState.balance < 50;
+    legendumLinked && linkState.balance !== null && linkState.balance < 50;
 
   // Auto-logout when Legendum is unlinked
   useEffect(() => {
     if (legendumLinked) {
       wasLinkedRef.current = true;
     } else if (wasLinkedRef.current && linkState.status === "unlinked") {
-      fetch("/auth/logout", { method: "POST", credentials: "include" })
-        .finally(() => window.location.reload());
+      fetch("/auth/logout", { method: "POST", credentials: "include" }).finally(
+        () => window.location.reload(),
+      );
     }
   }, [legendumLinked, linkState.status]);
 
@@ -81,7 +80,9 @@ export default function TopBar({ isSelfHosted }: Props) {
         <div className="topbar-right">
           {legendumLinked ? (
             <a
-              href={ctrlRef.current?.accountUrl || "https://legendum.co.uk/account"}
+              href={
+                ctrlRef.current?.accountUrl || "https://legendum.co.uk/account"
+              }
               target="_blank"
               rel="noopener noreferrer"
               className={`legendum-btn legendum-linked${lowCredits ? " low-credits" : ""}`}
