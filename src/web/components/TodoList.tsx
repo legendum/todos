@@ -512,7 +512,10 @@ function TodoSortableRow({
   const indentPad = (line.indent || "").length * 20;
 
   const content = (
-    <div className="todo-row" style={{ paddingLeft: `${indentPad}px` }}>
+    <div
+      className="todo-row"
+      style={indentPad ? { paddingLeft: `${16 + indentPad}px` } : undefined}
+    >
       <DragHandle listeners={listeners} />
       <button
         type="button"
