@@ -1,6 +1,6 @@
-# todos
+# Todos
 
-**Minimal todos for humans and agents**
+**Simple todo lists for AI tasks**
 
 Todos (see https://todos.in/) is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
 
