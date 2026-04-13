@@ -1,5 +1,5 @@
 /** Line must stay in sync with `parseContent` todo detection. */
-const TODO_LINE_RE = /^(\s*)(?:(-|\*|\+)\s)?\[([ xX])\]\s*(.*)$/;
+const TODO_LINE_RE = /^(\s*)(?:(-|\*|\+|\d+\.)\s)?\[([ xX])\]\s*(.*)$/;
 
 /** Count todo lines in a todos.md document. */
 export function countTodos(text: string): { total: number; done: number } {
@@ -62,8 +62,8 @@ export function validateCategoryName(name: string): string | null {
   return null;
 }
 
-/** Optional GFM list marker before `[ ]` / `[x]` (e.g. `- [ ] task`). */
-export type TodoListMarker = "-" | "*" | "+";
+/** Optional list marker before `[ ]` / `[x]` (e.g. `- [ ] task` or `1. [ ] task`). */
+export type TodoListMarker = "-" | "*" | "+" | `${number}.`;
 
 export interface TodoLine {
   done: boolean;

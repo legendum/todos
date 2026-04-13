@@ -76,6 +76,11 @@ describe("parseContent / serializeContent", () => {
     expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
   });
 
+  test("preserves numbered list markers like 1. 2. before checkboxes", () => {
+    const input = "1. [ ] first\n2. [x] second\n10. [ ] tenth";
+    expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
+  });
+
   test("bare checkbox lines unchanged", () => {
     const input = "[ ] one\n[x] two";
     expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
