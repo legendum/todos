@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   countTodos,
+  mergeConsecutiveFreeformLines,
   parseContent,
   serializeContent,
   toSlug,
@@ -43,6 +44,29 @@ Context: shipping by Friday
 Just some random text
 Another line`;
     expect(countTodos(text)).toEqual({ total: 0, done: 0 });
+  });
+});
+
+describe("mergeConsecutiveFreeformLines", () => {
+  test("merges intro lines into one block before first todo", () => {
+    const input = "## Title\n\nSome intro text\n\n- [x] first task";
+    const merged = mergeConsecutiveFreeformLines(parseContent(input));
+    expect(merged.length).toBe(2);
+    expect(merged[0]).toEqual({
+      isTodo: false,
+      raw: "## Title\n\nSome intro text\n",
+    });
+    expect(merged[1].isTodo).toBe(true);
+  });
+
+  test("keeps separate free-form runs split by todos", () => {
+    const merged = mergeConsecutiveFreeformLines(
+      parseContent("Note A\n- [ ] t\nNote B"),
+    );
+    expect(merged.length).toBe(3);
+    expect(merged[0]).toEqual({ isTodo: false, raw: "Note A" });
+    expect(merged[1].isTodo).toBe(true);
+    expect(merged[2]).toEqual({ isTodo: false, raw: "Note B" });
   });
 });
 

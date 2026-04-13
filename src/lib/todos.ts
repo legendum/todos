@@ -95,18 +95,53 @@ export function parseContent(content: string): ParsedLine[] {
   });
 }
 
+/**
+ * Merge each run of consecutive non-todo lines into one free-form block (`raw` joined by `\n`).
+ * Used by the web UI so intro / notes are one draggable unit; todos stay separate rows.
+ */
+export function mergeConsecutiveFreeformLines(
+  lines: ParsedLine[],
+): ParsedLine[] {
+  const out: ParsedLine[] = [];
+  const buf: string[] = [];
+  const flush = () => {
+    if (buf.length) {
+      out.push({ isTodo: false, raw: buf.join("\n") });
+      buf.length = 0;
+    }
+  };
+  for (const p of lines) {
+    if (p.isTodo) {
+      flush();
+      out.push(p);
+    } else {
+      buf.push(p.raw);
+    }
+  }
+  flush();
+  return out;
+}
+
 export function serializeContent(lines: ParsedLine[]): string {
   if (lines.length === 0) return "";
-  return `${lines
-    .map((l) => {
-      if (l.isTodo) {
-        const t = l.todo;
-        const indent = t.indent || "";
-        const mid = t.listMarker ? `${t.listMarker} ` : "";
-        const box = t.done ? "[x]" : "[ ]";
-        return `${indent}${mid}${box} ${t.text}`;
-      }
-      return l.raw;
-    })
-    .join("\n")}\n`;
+  const parts = lines.map((l) => {
+    if (l.isTodo) {
+      const t = l.todo;
+      const indent = t.indent || "";
+      const mid = t.listMarker ? `${t.listMarker} ` : "";
+      const box = t.done ? "[x]" : "[ ]";
+      return `${indent}${mid}${box} ${t.text}`;
+    }
+    return l.raw;
+  });
+  let out = parts[0] ?? "";
+  for (let i = 1; i < parts.length; i++) {
+    const next = parts[i];
+    if (out.endsWith("\n")) {
+      out += next;
+    } else {
+      out += `\n${next}`;
+    }
+  }
+  return `${out}\n`;
 }

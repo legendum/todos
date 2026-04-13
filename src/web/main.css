@@ -203,18 +203,23 @@ body {
   color: #cbd5e1;
 }
 
-/* Draggable markdown row (no swipe actions) */
+/* Draggable markdown row (no swipe actions) — align with .todo-row */
 .md-sortable-inner {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px 10px 8px;
+  gap: 12px;
+  padding: 12px 16px;
+  min-height: 48px;
+  box-sizing: border-box;
 }
 .markdown-sortable-row .md-block {
   flex: 1;
   min-width: 0;
   border-bottom: none;
   padding: 0;
+}
+.markdown-sortable-row .drag-handle {
+  margin-top: 2px;
 }
 
 /* Swipe row */

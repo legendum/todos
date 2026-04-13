@@ -17,7 +17,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ParsedLine, TodoListMarker } from "../../lib/todos";
-import { parseContent, serializeContent } from "../../lib/todos";
+import {
+  mergeConsecutiveFreeformLines,
+  parseContent,
+  serializeContent,
+} from "../../lib/todos";
 import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
@@ -47,7 +51,7 @@ type Line =
 
 function parseLines(content: string): Line[] {
   if (!content) return [];
-  return parseContent(content).map((p, i) => {
+  return mergeConsecutiveFreeformLines(parseContent(content)).map((p, i) => {
     const id = `line-${i}`;
     if (p.isTodo) {
       const t = p.todo;
