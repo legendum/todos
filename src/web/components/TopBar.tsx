@@ -74,7 +74,20 @@ export default function TopBar({ isSelfHosted }: Props) {
           alt="Todos"
           style={{ width: 28, height: 28, borderRadius: 6 }}
         />
-        <span style={{ fontWeight: 600, fontSize: 16 }}>Todos</span>
+        <span style={{ fontWeight: 600, fontSize: 16 }}>
+          Todos
+          <span
+            style={{
+              fontSize: "0.65em",
+              verticalAlign: "super",
+              lineHeight: 0,
+              color: "#94a3b8",
+            }}
+            aria-hidden="true"
+          >
+            ®
+          </span>
+        </span>
       </div>
       {!isSelfHosted && linkController && (
         <div className="topbar-right">

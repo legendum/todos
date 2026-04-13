@@ -1,8 +1,8 @@
-# Todos
+# Todos®
 
 **Simple todo lists for AI tasks**
 
-Todos (see https://todos.in/) is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
+Todos® (see https://todos.in/) is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
 
 Self-hostable: the same codebase runs at todos.in and locally via `bun run start`. Without `LEGENDUM_API_KEY`, it skips auth and billing entirely.
 
@@ -270,3 +270,7 @@ See [docs/SPEC.md](docs/SPEC.md) for the full product spec and [docs/CONCEPT.md]
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Trademark
+
+Todos® is a registered trademark in the UK: UK00003479452. All Rights Reserved.
