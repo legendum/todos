@@ -21,6 +21,7 @@ import { parseContent, serializeContent } from "../../lib/todos";
 import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
+import MarkdownBlock from "./MarkdownBlock";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Category = {
@@ -213,12 +214,19 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   };
 
   const openEditDialog = (index: number) => {
+    const row = lines[index];
+    if (!row?.isTodo) return;
     setEditingIndex(index);
-    setEditText(lines[index].text);
+    setEditText(row.text);
   };
 
   const saveEdit = () => {
     if (editingIndex === null) return;
+    const row = lines[editingIndex];
+    if (!row?.isTodo) {
+      setEditingIndex(null);
+      return;
+    }
     const trimmed = editText.trim();
     if (!trimmed) {
       deleteLine(editingIndex);
@@ -358,15 +366,19 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
             items={lines.map((l) => l.id)}
             strategy={verticalListSortingStrategy}
           >
-            {lines.map((line, index) => (
-              <SortableLine
-                key={line.id}
-                line={line}
-                onToggle={() => toggleDone(index)}
-                onDelete={() => deleteLine(index)}
-                onEdit={() => openEditDialog(index)}
-              />
-            ))}
+            {lines.map((line, index) =>
+              line.isTodo ? (
+                <TodoSortableRow
+                  key={line.id}
+                  line={line}
+                  onToggle={() => toggleDone(index)}
+                  onDelete={() => deleteLine(index)}
+                  onEdit={() => openEditDialog(index)}
+                />
+              ) : (
+                <MarkdownSortableRow key={line.id} line={line} />
+              ),
+            )}
           </SortableContext>
 
           <DragOverlay>
@@ -377,6 +389,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                     <DragHandle />
                     <button
                       className={`todo-checkbox${draggedLine.done ? " checked" : ""}`}
+                      type="button"
                     >
                       {draggedLine.done && <CheckIcon />}
                     </button>
@@ -387,8 +400,12 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                     </span>
                   </div>
                 ) : (
-                  <div className="freeform-line">
-                    <TextWithLinks text={draggedLine.text} />
+                  <div
+                    className="md-sortable-inner"
+                    style={{ maxWidth: "100%" }}
+                  >
+                    <DragHandle />
+                    <MarkdownBlock text={draggedLine.text} />
                   </div>
                 )}
               </div>
@@ -423,13 +440,49 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   );
 }
 
-function SortableLine({
+/** Free-form line: whole row is draggable; markdown is read-only (no swipe edit/delete). */
+function MarkdownSortableRow({
+  line,
+}: {
+  line: Extract<Line, { isTodo: false }>;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: line.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div
+        className="row-wrap markdown-sortable-row"
+        style={{ borderBottom: "none" }}
+      >
+        <div className="md-sortable-inner">
+          <DragHandle listeners={listeners} />
+          <MarkdownBlock text={line.text} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TodoSortableRow({
   line,
   onToggle,
   onDelete,
   onEdit,
 }: {
-  line: Line;
+  line: Extract<Line, { isTodo: true }>;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -452,12 +505,13 @@ function SortableLine({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const indentPad = line.isTodo ? (line.indent || "").length * 20 : 0;
+  const indentPad = (line.indent || "").length * 20;
 
-  const content = line.isTodo ? (
+  const content = (
     <div className="todo-row" style={{ paddingLeft: `${indentPad}px` }}>
       <DragHandle listeners={listeners} />
       <button
+        type="button"
         className={`todo-checkbox${line.done ? " checked" : ""}`}
         onClick={(e) => {
           e.stopPropagation();
@@ -469,19 +523,6 @@ function SortableLine({
       <span className={`todo-text${line.done ? " done" : ""}`}>
         <TextWithLinks text={line.text} />
       </span>
-    </div>
-  ) : (
-    <div
-      className="freeform-line"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        paddingLeft: `${indentPad}px`,
-      }}
-    >
-      <DragHandle listeners={listeners} />
-      <span>{line.text ? <TextWithLinks text={line.text} /> : "\u00A0"}</span>
     </div>
   );
 

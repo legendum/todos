@@ -139,6 +139,84 @@ body {
   margin-top: 2px;
 }
 
+/* Free-form markdown blocks in todos.md (not task lines) */
+.md-block {
+  padding: 10px 16px 12px 20px;
+  border-bottom: 1px solid #334155;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #e2e8f0;
+}
+.md-block p {
+  margin: 0.5em 0;
+}
+.md-block p:first-child {
+  margin-top: 0;
+}
+.md-block p:last-child {
+  margin-bottom: 0;
+}
+.md-block h1,
+.md-block h2,
+.md-block h3,
+.md-block h4 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin: 0.65em 0 0.35em;
+  color: #f1f5f9;
+}
+.md-block h1:first-child,
+.md-block h2:first-child,
+.md-block h3:first-child {
+  margin-top: 0;
+}
+.md-block ul,
+.md-block ol {
+  margin: 0.35em 0;
+  padding-left: 1.35em;
+}
+.md-block li {
+  margin: 0.2em 0;
+}
+.md-block code {
+  font-size: 0.9em;
+  background: #1e293b;
+  padding: 0.12em 0.4em;
+  border-radius: 4px;
+}
+.md-block pre {
+  background: #1e293b;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+  font-size: 14px;
+}
+.md-block pre code {
+  background: none;
+  padding: 0;
+}
+.md-block blockquote {
+  margin: 0.4em 0;
+  padding-left: 12px;
+  border-left: 3px solid #475569;
+  color: #cbd5e1;
+}
+
+/* Draggable markdown row (no swipe actions) */
+.md-sortable-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px 10px 8px;
+}
+.markdown-sortable-row .md-block {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+  padding: 0;
+}
+
 /* Swipe row */
 .row-wrap {
   list-style: none;
