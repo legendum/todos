@@ -10,6 +10,7 @@ type CategoryRow = {
   user_id: number;
   ulid: string;
   name: string;
+  slug: string;
   text: string;
   updated_at: number;
 };
@@ -18,7 +19,7 @@ function findByUlid(ulid: string): CategoryRow | undefined {
   const db = getDb();
   return db
     .query(
-      "SELECT id, user_id, ulid, name, text, updated_at FROM categories WHERE ulid = ?",
+      "SELECT id, user_id, ulid, name, slug, text, updated_at FROM categories WHERE ulid = ?",
     )
     .get(ulid) as CategoryRow | undefined;
 }
@@ -33,6 +34,8 @@ export function getWebhookTodos(ulid: string): Response {
       "Content-Type": "text/markdown; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "X-Updated-At": String(row.updated_at),
+      "X-Category-Slug": row.slug,
+      "X-Category-Name": row.name,
     },
   });
 }

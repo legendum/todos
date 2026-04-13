@@ -150,12 +150,14 @@ async function main() {
   // Fetch server content
   let serverContent = "";
   let serverUpdatedAt = 0;
+  let categorySlug: string | null = null;
   let online = true;
   try {
     const res = await fetch(webhookUrl, { method: "GET" });
     if (res.ok) {
       serverContent = await res.text();
       serverUpdatedAt = Number(res.headers.get("X-Updated-At") || "0");
+      categorySlug = res.headers.get("X-Category-Slug");
     } else {
       online = false;
     }
@@ -238,12 +240,16 @@ async function main() {
     installSkill();
     return;
   } else if (command === "open" && args.length === 1) {
-    // Open in browser
-    const baseUrl = webhookUrl.replace(/\/w\/[A-Z0-9]+$/, "");
+    const origin = new URL(webhookUrl).origin;
+    const slug = categorySlug?.trim();
+    const pageUrl =
+      slug && slug.length > 0
+        ? `${origin}/${encodeURIComponent(slug)}`
+        : webhookUrl.replace(/\/w\/[A-Z0-9]+$/, "");
     try {
-      execSync(`open "${baseUrl}"`, { stdio: "ignore" });
+      execSync(`open "${pageUrl}"`, { stdio: "ignore" });
     } catch {
-      console.log(`Open: ${baseUrl}`);
+      console.log(`Open: ${pageUrl}`);
     }
     return;
   } else {

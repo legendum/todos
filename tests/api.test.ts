@@ -172,6 +172,8 @@ describe("API — self-hosted mode", () => {
 
     const res = await fetch(`${base}/w/${ulid}`);
     expect(res.status).toBe(200);
+    expect(res.headers.get("X-Category-Slug")).toBe("groceries");
+    expect(res.headers.get("X-Category-Name")).toBe("groceries");
     const text = await res.text();
     expect(text).toContain("[ ] Only todo");
   });
