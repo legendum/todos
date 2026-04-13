@@ -16,7 +16,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useState } from "react";
+import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
+import EditTextDialog from "./EditTextDialog";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Category = {
@@ -38,6 +40,8 @@ export default function CategoriesList({ onSelect }: Props) {
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [renameCategory, setRenameCategory] = useState<Category | null>(null);
+  const [renameText, setRenameText] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -82,11 +86,30 @@ export default function CategoriesList({ onSelect }: Props) {
     await fetchCategories();
   };
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveDragId(String(event.active.id));
-  }
+  const openRename = (cat: Category) => {
+    setRenameCategory(cat);
+    setRenameText(cat.name);
+  };
 
-  function handleDragEnd(event: DragEndEvent) {
+  const saveRename = async () => {
+    if (!renameCategory) return;
+    const trimmed = renameText.trim();
+    if (!trimmed || trimmed === renameCategory.name) {
+      setRenameCategory(null);
+      return;
+    }
+    const data = await patchCategoryName(renameCategory.slug, trimmed);
+    if (data) {
+      setRenameCategory(null);
+      await fetchCategories();
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragId(null);
     const { active, over } = event;
     if (!over) return;
@@ -107,7 +130,7 @@ export default function CategoriesList({ onSelect }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order: next.map((c) => c.slug) }),
     });
-  }
+  };
 
   const draggedCat = activeDragId
     ? categories.find((c) => c.slug === activeDragId)
@@ -130,6 +153,7 @@ export default function CategoriesList({ onSelect }: Props) {
                 key={cat.slug}
                 category={cat}
                 onSelect={() => onSelect(cat)}
+                onEdit={() => openRename(cat)}
                 onDelete={() => handleDelete(cat.slug)}
               />
             ))}
@@ -174,6 +198,7 @@ export default function CategoriesList({ onSelect }: Props) {
           )}
           <div style={{ display: "flex", gap: 8 }}>
             <button
+              type="button"
               className="btn"
               onClick={handleCreate}
               disabled={!newName.trim()}
@@ -181,6 +206,7 @@ export default function CategoriesList({ onSelect }: Props) {
               Create
             </button>
             <button
+              type="button"
               className="btn btn-secondary"
               onClick={() => {
                 setCreating(false);
@@ -195,9 +221,20 @@ export default function CategoriesList({ onSelect }: Props) {
       )}
 
       {!creating && (
-        <button className="fab" onClick={() => setCreating(true)}>
+        <button type="button" className="fab" onClick={() => setCreating(true)}>
           +
         </button>
+      )}
+
+      {renameCategory && (
+        <EditTextDialog
+          title="Edit category"
+          placeholder="Category name"
+          text={renameText}
+          onChange={setRenameText}
+          onSave={saveRename}
+          onClose={() => setRenameCategory(null)}
+        />
       )}
     </div>
   );
@@ -206,10 +243,12 @@ export default function CategoriesList({ onSelect }: Props) {
 function CategoryRow({
   category,
   onSelect,
+  onEdit,
   onDelete,
 }: {
   category: Category;
   onSelect: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const {
@@ -221,7 +260,10 @@ function CategoryRow({
     isDragging,
   } = useSortable({ id: category.slug });
 
-  const { sliderStyle, slideHandlers } = useSwipeToReveal({ onTap: onSelect });
+  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+    actionCount: 2,
+    onTap: onSelect,
+  });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -243,7 +285,17 @@ function CategoryRow({
             </span>
           </div>
         </div>
-        <button className="row-delete" onClick={onDelete}>
+        <button
+          type="button"
+          className="row-edit"
+          onClick={() => {
+            reset();
+            onEdit();
+          }}
+        >
+          Edit
+        </button>
+        <button type="button" className="row-delete" onClick={onDelete}>
           Delete
         </button>
       </div>

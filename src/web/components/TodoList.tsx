@@ -16,9 +16,11 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ParsedLine } from "../../lib/todos";
+import type { ParsedLine, TodoListMarker } from "../../lib/todos";
 import { parseContent, serializeContent } from "../../lib/todos";
+import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
+import EditTextDialog from "./EditTextDialog";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Category = {
@@ -30,15 +32,17 @@ type Category = {
   done: number;
 };
 
-/** A parsed line: either a todo or free-form text. */
-type Line = {
-  id: string; // stable key for DnD
-  raw: string;
-  isTodo: boolean;
-  done: boolean;
-  text: string; // For todos: text after `[ ] ` or `[x] `. For free-form: the raw line.
-  indent?: string;
-};
+/** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
+type Line =
+  | {
+      id: string;
+      isTodo: true;
+      done: boolean;
+      text: string;
+      indent?: string;
+      listMarker?: TodoListMarker;
+    }
+  | { id: string; isTodo: false; text: string };
 
 function parseLines(content: string): Line[] {
   if (!content) return [];
@@ -48,37 +52,31 @@ function parseLines(content: string): Line[] {
       const t = p.todo;
       return {
         id,
-        raw: p.raw,
         isTodo: true,
         done: t.done,
         text: t.text,
         indent: t.indent,
+        listMarker: t.listMarker,
       };
     }
-    return {
-      id,
-      raw: p.raw,
-      isTodo: false,
-      done: false,
-      text: p.raw,
-    };
+    return { id, isTodo: false, text: p.raw };
   });
 }
 
 function serializeLines(lines: Line[]): string {
-  const mapped: ParsedLine[] = lines.map((l) => {
-    if (l.isTodo) {
-      return {
-        isTodo: true,
-        todo: { done: l.done, text: l.text, indent: l.indent },
-        raw: l.raw,
-      };
-    }
-    return {
-      isTodo: false,
-      raw: l.raw,
-    };
-  });
+  const mapped: ParsedLine[] = lines.map((l) =>
+    l.isTodo
+      ? {
+          isTodo: true,
+          todo: {
+            done: l.done,
+            text: l.text,
+            indent: l.indent,
+            listMarker: l.listMarker,
+          },
+        }
+      : { isTodo: false, raw: l.text },
+  );
   return serializeContent(mapped);
 }
 
@@ -188,7 +186,10 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
 
   const toggleDone = (index: number) => {
     updateLines((prev) =>
-      prev.map((l, i) => (i === index ? { ...l, done: !l.done } : l)),
+      prev.map((l, i) => {
+        if (i !== index || !l.isTodo) return l;
+        return { ...l, done: !l.done };
+      }),
     );
   };
 
@@ -204,7 +205,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       ...prev,
       {
         id: `line-${Date.now()}`,
-        raw: `[ ] ${text}`,
         isTodo: true,
         done: false,
         text,
@@ -249,14 +249,8 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       setEditingName(false);
       return;
     }
-    const res = await fetch(`/${category.slug}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { name: string; slug: string };
+    const data = await patchCategoryName(category.slug, trimmed);
+    if (data) {
       setEditingName(false);
       onRenamed(data);
     }
@@ -417,84 +411,14 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       </div>
 
       {editingIndex !== null && (
-        <EditDialog
+        <EditTextDialog
+          title="Edit todo"
           text={editText}
           onChange={setEditText}
           onSave={saveEdit}
           onClose={() => setEditingIndex(null)}
         />
       )}
-    </div>
-  );
-}
-
-function EditDialog({
-  text,
-  onChange,
-  onSave,
-  onClose,
-}: {
-  text: string;
-  onChange: (text: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
-
-  return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
-          <h2 style={{ margin: 0, fontSize: 18 }}>Edit todo</h2>
-          <button className="dialog-close" onClick={onClose}>
-            &times;
-          </button>
-        </div>
-        <div className="dialog-body">
-          <input
-            ref={inputRef}
-            className="input"
-            value={text}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSave();
-            }}
-            style={{ width: "100%" }}
-          />
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 12,
-              justifyContent: "flex-end",
-            }}
-          >
-            <button
-              className="btn"
-              style={{ background: "#334155" }}
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button className="btn" onClick={onSave}>
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -528,11 +452,10 @@ function SortableLine({
     opacity: isDragging ? 0.4 : 1,
   };
 
+  const indentPad = line.isTodo ? (line.indent || "").length * 20 : 0;
+
   const content = line.isTodo ? (
-    <div
-      className="todo-row"
-      style={{ paddingLeft: `${(line.indent || "").length * 20}px` }}
-    >
+    <div className="todo-row" style={{ paddingLeft: `${indentPad}px` }}>
       <DragHandle listeners={listeners} />
       <button
         className={`todo-checkbox${line.done ? " checked" : ""}`}
@@ -554,7 +477,7 @@ function SortableLine({
         display: "flex",
         alignItems: "center",
         gap: 8,
-        paddingLeft: `${(line.indent || "").length * 20}px`,
+        paddingLeft: `${indentPad}px`,
       }}
     >
       <DragHandle listeners={listeners} />
@@ -568,6 +491,7 @@ function SortableLine({
         <div className="row-slider" style={sliderStyle} {...slideHandlers}>
           <div className="row-main">{content}</div>
           <button
+            type="button"
             className="row-edit"
             onClick={() => {
               reset();
@@ -576,7 +500,7 @@ function SortableLine({
           >
             Edit
           </button>
-          <button className="row-delete" onClick={onDelete}>
+          <button type="button" className="row-delete" onClick={onDelete}>
             Delete
           </button>
         </div>

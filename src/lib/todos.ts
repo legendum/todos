@@ -1,12 +1,14 @@
+/** Line must stay in sync with `parseContent` todo detection. */
+const TODO_LINE_RE = /^(\s*)(?:(-|\*|\+)\s)?\[([ xX])\]\s*(.*)$/;
+
 /** Count todo lines in a todos.md document. */
 export function countTodos(text: string): { total: number; done: number } {
   let total = 0;
   let done = 0;
-  for (const line of text.split("\n")) {
-    const match = line.match(/^\s*[-*]?\s*\[([ xX])\]\s*(.*)$/);
-    if (match) {
+  for (const p of parseContent(text)) {
+    if (p.isTodo) {
       total++;
-      if (match[1].toLowerCase() === "x") done++;
+      if (p.todo.done) done++;
     }
   }
   return { total, done };
@@ -60,10 +62,15 @@ export function validateCategoryName(name: string): string | null {
   return null;
 }
 
+/** Optional GFM list marker before `[ ]` / `[x]` (e.g. `- [ ] task`). */
+export type TodoListMarker = "-" | "*" | "+";
+
 export interface TodoLine {
   done: boolean;
   text: string;
   indent?: string;
+  /** Preserved on round-trip; omit for plain `[ ]` lines. */
+  listMarker?: TodoListMarker;
 }
 
 export type ParsedLine =
@@ -74,12 +81,15 @@ export function parseContent(content: string): ParsedLine[] {
   const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
   if (!trimmed) return [];
   return trimmed.split("\n").map((line) => {
-    const match = line.match(/^(\s*)(?:[-*]?\s*)?\[([ xX])\]\s*(.*)$/);
+    const match = line.match(TODO_LINE_RE);
     if (match) {
       const indent = match[1];
-      const done = match[2].toLowerCase() === "x";
-      const text = match[3];
-      return { isTodo: true, todo: { done, text, indent } };
+      const listMarker = match[2] as TodoListMarker | undefined;
+      const done = match[3].toLowerCase() === "x";
+      const text = match[4];
+      const todo: TodoLine = { done, text, indent };
+      if (listMarker) todo.listMarker = listMarker;
+      return { isTodo: true, todo };
     }
     return { isTodo: false, raw: line };
   });
@@ -90,9 +100,11 @@ export function serializeContent(lines: ParsedLine[]): string {
   return `${lines
     .map((l) => {
       if (l.isTodo) {
-        const indent = l.todo.indent || "";
-        const prefix = l.todo.done ? "[x]" : "[ ]";
-        return `${indent + prefix} ${l.todo.text}`;
+        const t = l.todo;
+        const indent = t.indent || "";
+        const mid = t.listMarker ? `${t.listMarker} ` : "";
+        const box = t.done ? "[x]" : "[ ]";
+        return `${indent}${mid}${box} ${t.text}`;
       }
       return l.raw;
     })

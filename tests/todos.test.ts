@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { countTodos, toSlug, validateCategoryName, validateTodosText } from "../src/lib/todos";
+import {
+  countTodos,
+  parseContent,
+  serializeContent,
+  toSlug,
+  validateCategoryName,
+  validateTodosText,
+} from "../src/lib/todos";
 
 describe("countTodos", () => {
   test("counts todos and done items", () => {
@@ -36,6 +43,18 @@ Context: shipping by Friday
 Just some random text
 Another line`;
     expect(countTodos(text)).toEqual({ total: 0, done: 0 });
+  });
+});
+
+describe("parseContent / serializeContent", () => {
+  test("preserves - * + markers before checkboxes", () => {
+    const input = "## x\n- [ ] a\n* [x] b\n+ [ ] c\n[ ] d";
+    expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
+  });
+
+  test("bare checkbox lines unchanged", () => {
+    const input = "[ ] one\n[x] two";
+    expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
   });
 });
 
