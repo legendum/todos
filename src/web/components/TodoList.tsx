@@ -129,7 +129,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
-  const [syncPending, setSyncPending] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -153,11 +152,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       document.title = "Todos";
     };
   }, [category.name, lines]);
-
-  const refreshPendingUi = useCallback(async () => {
-    const row = await getMarkdown(category.slug);
-    setSyncPending(Boolean(row?.pending));
-  }, [category.slug]);
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -192,13 +186,12 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
           setLines([]);
         }
       }
-      if (!cancelled) void refreshPendingUi();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [category.slug, refreshPendingUi]);
+  }, [category.slug]);
 
   // Live updates when online
   useEffect(() => {
@@ -226,12 +219,11 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       void (async () => {
         const row = await getMarkdown(category.slug);
         if (row) setLines(parseLines(row.text));
-        await refreshPendingUi();
       })();
     };
     window.addEventListener("todos-offline-sync", onSync);
     return () => window.removeEventListener("todos-offline-sync", onSync);
-  }, [category.slug, refreshPendingUi]);
+  }, [category.slug]);
 
   /** Push current lines to server, debounced. */
   const pushToServer = useCallback(
@@ -247,7 +239,6 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
             updatedAt: prev?.updatedAt ?? 0,
             pending: true,
           });
-          await refreshPendingUi();
           try {
             const res = await fetch(`/${category.slug}`, {
               method: "PUT",
@@ -266,13 +257,11 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
             }
           } catch {
             /* pending stays true */
-          } finally {
-            await refreshPendingUi();
           }
         })();
       }, 300);
     },
-    [category.slug, refreshPendingUi],
+    [category.slug],
   );
 
   const updateLines = useCallback(
@@ -474,11 +463,10 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </div>
       </div>
 
-      {(!online || syncPending) && (
+      {!online && (
         <div className="offline-banner">
-          {!online
-            ? "You're offline — edits stay on this device and sync when you're back online."
-            : "Saving changes to the server…"}
+          You're offline — edits stay on this device and sync when you're back
+          online.
         </div>
       )}
 
