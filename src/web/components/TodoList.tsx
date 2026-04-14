@@ -343,13 +343,18 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
           ) : (
             <h2
               className="screen-title"
+              title="Click to rename category"
               onClick={startEditingName}
               style={{ cursor: "pointer" }}
             >
               {category.name}
             </h2>
           )}
-          <div className="webhook-url" onClick={copyWebhookUrl}>
+          <div
+            className="webhook-url"
+            title={copied ? "Copied to clipboard" : "Click to copy webhook URL"}
+            onClick={copyWebhookUrl}
+          >
             /w/{category.ulid}
             {copied ? (
               <span className="copied-badge">Copied!</span>
