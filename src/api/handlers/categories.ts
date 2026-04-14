@@ -28,12 +28,13 @@ export function listCategories(userId: number): Response {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, ulid, name, slug, position, text, created_at FROM categories WHERE user_id = ? ORDER BY position, id",
+      "SELECT id, ulid, name, slug, position, text, created_at, updated_at FROM categories WHERE user_id = ? ORDER BY position, id",
     )
     .all(userId) as CategoryRow[];
 
   const categories = rows.map((r) => {
     const { total, done } = countTodos(r.text);
+    const updated_at = r.updated_at ?? r.created_at;
     return {
       name: r.name,
       slug: r.slug,
@@ -41,6 +42,7 @@ export function listCategories(userId: number): Response {
       position: r.position,
       total,
       done,
+      updated_at,
     };
   });
 

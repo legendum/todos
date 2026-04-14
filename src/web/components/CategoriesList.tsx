@@ -16,31 +16,28 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useState } from "react";
+import {
+  type CategoryListEntry,
+  getCategoriesList,
+  saveCategoriesList,
+} from "../offlineDb";
 import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
-type Category = {
-  name: string;
-  slug: string;
-  ulid: string;
-  position: number;
-  total: number;
-  done: number;
-};
-
 type Props = {
-  onSelect: (cat: Category) => void;
+  onSelect: (cat: CategoryListEntry) => void;
 };
 
 export default function CategoriesList({ onSelect }: Props) {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<CategoryListEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [renameCategory, setRenameCategory] = useState<Category | null>(null);
+  const [renameCategory, setRenameCategory] =
+    useState<CategoryListEntry | null>(null);
   const [renameText, setRenameText] = useState("");
 
   const sensors = useSensors(
@@ -49,17 +46,31 @@ export default function CategoriesList({ onSelect }: Props) {
   );
 
   const fetchCategories = useCallback(async () => {
-    const res = await fetch("/", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return;
-    const data = (await res.json()) as { categories: Category[] };
-    setCategories(data.categories);
+    try {
+      const res = await fetch("/", {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as { categories: CategoryListEntry[] };
+      setCategories(data.categories);
+      await saveCategoriesList(data.categories);
+    } catch {
+      const cached = await getCategoriesList();
+      if (cached) setCategories(cached);
+    }
   }, []);
 
   useEffect(() => {
     fetchCategories();
+  }, [fetchCategories]);
+
+  useEffect(() => {
+    const onSync = () => {
+      void fetchCategories();
+    };
+    window.addEventListener("todos-offline-sync", onSync);
+    return () => window.removeEventListener("todos-offline-sync", onSync);
   }, [fetchCategories]);
 
   const handleCreate = async () => {
@@ -86,7 +97,7 @@ export default function CategoriesList({ onSelect }: Props) {
     await fetchCategories();
   };
 
-  const openRename = (cat: Category) => {
+  const openRename = (cat: CategoryListEntry) => {
     setRenameCategory(cat);
     setRenameText(cat.name);
   };
@@ -246,7 +257,7 @@ function CategoryRow({
   onEdit,
   onDelete,
 }: {
-  category: Category;
+  category: CategoryListEntry;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;

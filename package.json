@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build:web": "bun build src/web/entry.tsx --outdir=public/dist --target=browser --entry-naming=[name]-[hash].js",
-    "build": "rm -rf public/dist && bun run build:web",
+    "build": "rm -rf public/dist && bun run build:web && bun run scripts/build-sw.ts",
     "start": "bun run build && bun run src/api/server.ts",
     "dev": "bun run build && bun --hot src/api/server.ts",
     "test": "bun test",
@@ -24,6 +24,7 @@
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10"
+    "@biomejs/biome": "^2.4.10",
+    "workbox-build": "^7.4.0"
   }
 }

@@ -22,20 +22,17 @@ import {
   parseContent,
   serializeContent,
 } from "../../lib/todos";
+import {
+  type CategoryListEntry,
+  deleteMarkdown,
+  getMarkdown,
+  saveMarkdown,
+} from "../offlineDb";
 import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import MarkdownBlock from "./MarkdownBlock";
 import { useSwipeToReveal } from "./useSwipeToReveal";
-
-type Category = {
-  name: string;
-  slug: string;
-  ulid: string;
-  position: number;
-  total: number;
-  done: number;
-};
 
 /** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
 type Line =
@@ -113,7 +110,7 @@ function TextWithLinks({ text }: { text: string }) {
 }
 
 type Props = {
-  category: Category;
+  category: CategoryListEntry;
   onBack: () => void;
   onRenamed: (updated: { name: string; slug: string }) => void;
 };
@@ -129,11 +126,19 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [editName, setEditName] = useState(category.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+  const [syncPending, setSyncPending] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
   );
+
+  useEffect(() => {
+    if (!editingName) setEditName(category.name);
+  }, [category.name, category.slug, editingName]);
 
   // Update page title with category name and counts
   useEffect(() => {
@@ -149,33 +154,125 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     };
   }, [category.name, lines]);
 
-  // Fetch initial content and start SSE
-  useEffect(() => {
-    fetch(`/${category.slug}.md`, { credentials: "include" })
-      .then((r) => r.text())
-      .then((text) => setLines(parseLines(text)))
-      .catch(() => {});
+  const refreshPendingUi = useCallback(async () => {
+    const row = await getMarkdown(category.slug);
+    setSyncPending(Boolean(row?.pending));
+  }, [category.slug]);
 
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  // Load markdown from network or IndexedDB cache
+  useEffect(() => {
+    let cancelled = false;
+    const slug = category.slug;
+
+    void (async () => {
+      try {
+        const res = await fetch(`/${slug}.md`, { credentials: "include" });
+        if (!res.ok) throw new Error(String(res.status));
+        const text = await res.text();
+        const h = res.headers.get("X-Updated-At");
+        const updatedAt = h ? parseInt(h, 10) : 0;
+        await saveMarkdown({ slug, text, updatedAt, pending: false });
+        if (!cancelled) setLines(parseLines(text));
+      } catch {
+        const cached = await getMarkdown(slug);
+        if (cached) {
+          if (!cancelled) setLines(parseLines(cached.text));
+        } else if (!cancelled) {
+          setLines([]);
+        }
+      }
+      if (!cancelled) void refreshPendingUi();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [category.slug, refreshPendingUi]);
+
+  // Live updates when online
+  useEffect(() => {
+    if (!online) return;
     const es = new EventSource(`/w/${category.ulid}/events`);
-    es.addEventListener("update", (e) => setLines(parseLines(e.data)));
+    es.addEventListener("update", (e) => {
+      const text = (e as MessageEvent<string>).data;
+      void (async () => {
+        const prev = await getMarkdown(category.slug);
+        const t = Math.floor(Date.now() / 1000);
+        await saveMarkdown({
+          slug: category.slug,
+          text,
+          updatedAt: Math.max(prev?.updatedAt ?? 0, t),
+          pending: false,
+        });
+        setLines(parseLines(text));
+      })();
+    });
     return () => es.close();
-  }, [category.slug, category.ulid]);
+  }, [category.slug, category.ulid, online]);
+
+  useEffect(() => {
+    const onSync = () => {
+      void (async () => {
+        const row = await getMarkdown(category.slug);
+        if (row) setLines(parseLines(row.text));
+        await refreshPendingUi();
+      })();
+    };
+    window.addEventListener("todos-offline-sync", onSync);
+    return () => window.removeEventListener("todos-offline-sync", onSync);
+  }, [category.slug, refreshPendingUi]);
 
   /** Push current lines to server, debounced. */
   const pushToServer = useCallback(
     (updatedLines: Line[]) => {
       if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
       pushTimeoutRef.current = setTimeout(() => {
-        const text = serializeLines(updatedLines);
-        fetch(`/${category.slug}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "text/markdown" },
-          body: text,
-        });
+        void (async () => {
+          const text = serializeLines(updatedLines);
+          const prev = await getMarkdown(category.slug);
+          await saveMarkdown({
+            slug: category.slug,
+            text,
+            updatedAt: prev?.updatedAt ?? 0,
+            pending: true,
+          });
+          await refreshPendingUi();
+          try {
+            const res = await fetch(`/${category.slug}`, {
+              method: "PUT",
+              credentials: "include",
+              headers: { "Content-Type": "text/markdown" },
+              body: text,
+            });
+            if (res.ok) {
+              const j = (await res.json()) as { updated_at: number };
+              await saveMarkdown({
+                slug: category.slug,
+                text,
+                updatedAt: j.updated_at,
+                pending: false,
+              });
+            }
+          } catch {
+            /* pending stays true */
+          } finally {
+            await refreshPendingUi();
+          }
+        })();
       }, 300);
     },
-    [category.slug],
+    [category.slug, refreshPendingUi],
   );
 
   const updateLines = useCallback(
@@ -261,8 +358,20 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
       setEditingName(false);
       return;
     }
-    const data = await patchCategoryName(category.slug, trimmed);
+    if (!navigator.onLine) {
+      cancelEditName();
+      return;
+    }
+    const oldSlug = category.slug;
+    const data = await patchCategoryName(oldSlug, trimmed);
     if (data) {
+      if (data.slug !== oldSlug) {
+        const row = await getMarkdown(oldSlug);
+        if (row) {
+          await saveMarkdown({ ...row, slug: data.slug });
+          await deleteMarkdown(oldSlug);
+        }
+      }
       setEditingName(false);
       onRenamed(data);
     }
@@ -364,6 +473,14 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
           </div>
         </div>
       </div>
+
+      {(!online || syncPending) && (
+        <div className="offline-banner">
+          {!online
+            ? "You're offline — edits stay on this device and sync when you're back online."
+            : "Saving changes to the server…"}
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         <DndContext

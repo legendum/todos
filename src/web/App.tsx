@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  categoryFromTodoJson,
+  type TodoCategoryJson,
+} from "./categoryFromJson";
 import CategoriesList from "./components/CategoriesList";
 import Login from "./components/Login";
 import TodoList from "./components/TodoList";
 import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
+import { type CategoryListEntry, findCategoryInList } from "./offlineDb";
 
 type User = {
   legendum_linked: boolean;
-};
-
-type Category = {
-  name: string;
-  slug: string;
-  ulid: string;
-  position: number;
-  total: number;
-  done: number;
 };
 
 /** Extract slug from the current URL path. Returns null if at root. */
@@ -36,9 +32,8 @@ function getSlugFromPath(): string | null {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
-    null,
-  );
+  const [selectedCategory, setSelectedCategory] =
+    useState<CategoryListEntry | null>(null);
   const isSelfHosted = user ? !user.legendum_linked : false;
 
   const fetchUser = useCallback(async () => {
@@ -63,30 +58,36 @@ export default function App() {
     fetchUser().finally(() => setLoading(false));
   }, [fetchUser]);
 
-  // On initial load, if the URL has a slug, fetch that category
+  // On initial load, if the URL has a slug, fetch that category (or use cached list)
   useEffect(() => {
     if (!user || loading) return;
     const slug = getSlugFromPath();
     if (!slug) return;
 
-    fetch(`/${slug}.json`, {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.slug) {
-          setSelectedCategory({
-            name: data.name,
-            slug: data.slug,
-            ulid: data.ulid,
-            position: 0,
-            total: data.total ?? 0,
-            done: data.done ?? 0,
-          });
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const r = await fetch(`/${slug}.json`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (cancelled) return;
+        if (r.ok) {
+          const data = (await r.json()) as TodoCategoryJson;
+          if (data?.slug) setSelectedCategory(categoryFromTodoJson(data));
+          return;
         }
-      })
-      .catch(() => {});
+      } catch {
+        /* fall through to cache */
+      }
+      const cached = await findCategoryInList(slug);
+      if (!cancelled && cached) setSelectedCategory(cached);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading]);
 
   // Listen for popstate (browser back/forward)
@@ -95,35 +96,35 @@ export default function App() {
       const slug = getSlugFromPath();
       if (!slug) {
         setSelectedCategory(null);
-      } else {
-        fetch(`/${slug}.json`, {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
-            if (data?.slug) {
-              setSelectedCategory({
-                name: data.name,
-                slug: data.slug,
-                ulid: data.ulid,
-                position: 0,
-                total: data.total ?? 0,
-                done: data.done ?? 0,
-              });
-            } else {
-              setSelectedCategory(null);
-            }
-          })
-          .catch(() => setSelectedCategory(null));
+        return;
       }
+      void (async () => {
+        try {
+          const r = await fetch(`/${slug}.json`, {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          });
+          if (r.ok) {
+            const data = (await r.json()) as TodoCategoryJson;
+            if (data?.slug) {
+              setSelectedCategory(categoryFromTodoJson(data));
+              return;
+            }
+          }
+        } catch {
+          /* cache */
+        }
+        const cached = await findCategoryInList(slug);
+        if (cached) setSelectedCategory(cached);
+        else setSelectedCategory(null);
+      })();
     };
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const selectCategory = (cat: Category) => {
+  const selectCategory = (cat: CategoryListEntry) => {
     setSelectedCategory(cat);
     window.history.pushState(null, "", `/${cat.slug}`);
   };

@@ -105,7 +105,26 @@ describe("API — self-hosted mode", () => {
     expect(body.categories.length).toBe(2);
     expect(body.categories[0].name).toBe("groceries");
     expect(body.categories[0].slug).toBe("groceries");
+    expect(typeof body.categories[0].updated_at).toBe("number");
     expect(body.categories[1].slug).toBe("my-shopping-list");
+  });
+
+  test("GET / list updated_at does not go backwards after PUT", async () => {
+    const j0 = await fetch(`${base}/groceries.json`, {
+      headers: { Accept: "application/json" },
+    }).then((r) => r.json() as Promise<{ updated_at: number }>);
+    const t0 = j0.updated_at;
+    const put = await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: "[ ] sync check",
+    });
+    expect(put.status).toBe(200);
+    const { body } = await jsonGet("/");
+    const groceries = body.categories.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    );
+    expect(groceries.updated_at).toBeGreaterThanOrEqual(t0);
   });
 
   test("GET /:slug works for category with spaces in name", async () => {

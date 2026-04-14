@@ -87,7 +87,9 @@ async function serveIndex(): Promise<Response> {
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <meta name="theme-color" content="#0f172a" />
     <title>Todos</title>
-    <link rel="icon" type="image/png" sizes="512x512" href="/todos.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/todos-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/todos-512.png" />
+    <link rel="apple-touch-icon" href="/todos-192.png" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/main.css" />
   </head>
@@ -162,10 +164,42 @@ export default {
         });
       }
     }
-    if (path === "/todos.png") {
-      const file = Bun.file(join(root, "public/todos.png"));
+    const publicPng: Record<string, string> = {
+      "/todos.png": "todos.png",
+      "/todos-192.png": "todos-192.png",
+      "/todos-512.png": "todos-512.png",
+    };
+    const pngName = publicPng[path];
+    if (pngName) {
+      const file = Bun.file(join(root, "public", pngName));
       if (await file.exists()) {
         return new Response(file, { headers: { "Content-Type": "image/png" } });
+      }
+    }
+    if (path === "/dist/sw.js") {
+      const file = Bun.file(join(root, "public/dist/sw.js"));
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            "Content-Type": "application/javascript",
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/",
+          },
+        });
+      }
+    }
+    if (/^\/dist\/workbox-[a-f0-9]+\.js(\.map)?$/.test(path)) {
+      const file = Bun.file(join(root, "public", path.slice(1)));
+      if (await file.exists()) {
+        const isMap = path.endsWith(".map");
+        return new Response(file, {
+          headers: {
+            "Content-Type": isMap
+              ? "application/json"
+              : "application/javascript",
+            "Cache-Control": isMap ? "no-cache" : "public, max-age=86400",
+          },
+        });
       }
     }
     if (path.startsWith("/dist/")) {
