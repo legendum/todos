@@ -12,9 +12,7 @@ const legendum = require("../../lib/legendum.js");
 type LegendumExchange = {
   email: string;
   linked: boolean;
-  legendum_token?: string;
   account_token?: string;
-  token?: string;
 };
 
 export async function getLogin(req: Request): Promise<Response> {
@@ -80,7 +78,7 @@ export async function getCallback(req: Request): Promise<Response> {
     );
   }
 
-  const serviceToken = data.legendum_token ?? data.account_token ?? data.token;
+  const serviceToken = data.account_token;
 
   // Find or create user by email (stable identity)
   let user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
@@ -91,7 +89,7 @@ export async function getCallback(req: Request): Promise<Response> {
     db.run(
       "INSERT INTO users (email, legendum_token) VALUES (?, ?)",
       email,
-      serviceToken,
+      serviceToken ?? null,
     );
     user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
       id: number;

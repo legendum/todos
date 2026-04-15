@@ -36,8 +36,9 @@ export async function getAuthUserIdWithBearer(
   if (!legendum.isConfigured()) return null;
 
   try {
-    const { token, email } = await legendum.linkAccount(accountKey);
-    if (!token || !email) return null;
+    const { account_token: accountToken, email } =
+      await legendum.linkAccount(accountKey);
+    if (!accountToken || !email) return null;
 
     const db = getDb();
     // Find user by email (stable identity)
@@ -47,7 +48,11 @@ export async function getAuthUserIdWithBearer(
     if (!row) return null;
 
     // Update billing token
-    db.run("UPDATE users SET legendum_token = ? WHERE id = ?", token, row.id);
+    db.run(
+      "UPDATE users SET legendum_token = ? WHERE id = ?",
+      accountToken,
+      row.id,
+    );
     return row.id;
   } catch {
     return null;
