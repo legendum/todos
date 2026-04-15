@@ -26,7 +26,7 @@ The server stores todos in SQLite but every API surface speaks this format. The 
 ### 2.1 Auth (Login and Link with Legendum)
 
 1. **Login**: User clicks "Login with Legendum" → backend calls `requestLink()` then redirects to Legendum authorize URL via `authAndLinkUrl()` (login + service linking in one flow).
-2. **Callback**: Legendum returns to `/auth/callback` with code + state → backend exchanges code for `{ email, linked, legendum_token }`.
+2. **Callback**: Legendum returns to `/auth/callback` with code + state → backend exchanges code for `{ email, linked, account_token? }`; when present, `account_token` is stored in `users.legendum_token`.
 3. **Session**: Backend creates/updates user in `users` table, sets encrypted session cookie (HMAC-SHA256, 30-day expiry).
 4. **Logout**: `POST /auth/logout` → unset cookie.
 5. **Auto-logout on unlink**: If the user unlinks todos in Legendum, the frontend detects the status change and automatically logs out.

@@ -72,8 +72,8 @@ return Response.redirect(url);
 
 // Step 2: in your callback at redirectUri
 const data = await legendum.exchangeCode(code, redirectUri);
-// { email, linked, legendum_token? }
-if (data.linked) await db.users.update(user.id, { legendum_token: data.legendum_token });
+// { email, linked, account_token? }
+if (data.linked && data.account_token) await db.users.update(user.id, { legendum_token: data.account_token });
 ```
 
 **Login + link in one step** (recommended): call `requestLink()` first, then `authAndLinkUrl({ redirectUri, state, linkCode })`. The user authorizes *and* pairs in one redirect.
@@ -82,7 +82,7 @@ if (data.linked) await db.users.update(user.id, { legendum_token: data.legendum_
 const { code: linkCode } = await legendum.requestLink();
 const url = legendum.authAndLinkUrl({ redirectUri, state, linkCode });
 return Response.redirect(url);
-// In callback: exchangeCode returns linked: true with legendum_token immediately.
+// In callback: exchangeCode returns linked: true with account_token immediately (store as users.legendum_token).
 ```
 
 Notes:
@@ -141,14 +141,14 @@ Notes:
 User generates a `lak_…` on legendum.co.uk and pastes it once.
 
 ```ts
-const { token, email } = await legendum.linkAccount(accountKey);
-// Persist `token` against the user/agent. Discard the lak_.
+const { account_token, email } = await legendum.linkAccount(accountKey);
+// Persist `account_token` on the user row (e.g. as legendum_token). Discard the lak_.
 ```
 
 Notes:
 - Copy says "Legendum **account key**", not "API key" — avoids confusion with your own keys.
 - Account keys are password-equivalent: never log, never echo back.
-- The returned `token` is scoped to *your* `LEGENDUM_API_KEY`. Different services need separate links.
+- The returned `account_token` is scoped to *your* `LEGENDUM_API_KEY`. Different services need separate links.
 
 ### 3.4 `account(lak_…)` — acting *as* a user
 
@@ -285,7 +285,7 @@ Billing (all take an accountToken)
 Linking — OAuth
   legendum.authUrl({ redirectUri, state })            → URL string
   legendum.authAndLinkUrl({ redirectUri, state, linkCode })
-  legendum.exchangeCode(code, redirectUri)            → { email, linked, legendum_token? }
+  legendum.exchangeCode(code, redirectUri)            → { email, linked, account_token? }
 
 Linking — pairing-code
   legendum.requestLink()                              → { code, request_id }
@@ -293,7 +293,7 @@ Linking — pairing-code
   legendum.waitForLink(request_id, { interval, timeout }?)
 
 Linking — paste-a-key
-  legendum.linkAccount(lak_)                          → { token, email }
+  legendum.linkAccount(lak_)                          → { account_token, email }
 
 UI helpers
   legendum.button({ url, label, target })             → HTML
