@@ -33,7 +33,8 @@ Three jobs you'll do:
 ## 2. Setup
 
 ```
-src/lib/legendum.js   ← copy this file's sibling verbatim
+src/lib/legendum.js   ← copy from legendum repo public/sdk/ (canonical; keep in sync)
+src/lib/legendum.md   ← same source — integration guide, ships next to the SDK
 .env:
   LEGENDUM_API_KEY=lpk_...
   LEGENDUM_SECRET=lsk_...
@@ -73,7 +74,9 @@ return Response.redirect(url);
 // Step 2: in your callback at redirectUri
 const data = await legendum.exchangeCode(code, redirectUri);
 // { email, linked, account_token? }
-if (data.linked && data.account_token) await db.users.update(user.id, { legendum_token: data.account_token });
+if (data.linked && data.account_token) {
+  await db.users.update(user.id, { account_token: data.account_token });
+}
 ```
 
 **Login + link in one step** (recommended): call `requestLink()` first, then `authAndLinkUrl({ redirectUri, state, linkCode })`. The user authorizes *and* pairs in one redirect.
@@ -82,7 +85,7 @@ if (data.linked && data.account_token) await db.users.update(user.id, { legendum
 const { code: linkCode } = await legendum.requestLink();
 const url = legendum.authAndLinkUrl({ redirectUri, state, linkCode });
 return Response.redirect(url);
-// In callback: exchangeCode returns linked: true with account_token immediately (store as users.legendum_token).
+// In callback: exchangeCode returns linked: true with account_token immediately when paired.
 ```
 
 Notes:
@@ -98,9 +101,10 @@ Best when users already have accounts and you're bolting billing on. User clicks
 ```ts
 const handler = legendum.middleware({
   prefix: "/legendum",
-  getToken:   async (req, user) => user.legendum_token,
-  setToken:   async (req, token, user) => db.users.update(user.id, { legendum_token: token }),
-  clearToken: async (req, user) => db.users.update(user.id, { legendum_token: null }),
+  getToken:   async (req, user) => user.account_token,
+  setToken:   async (req, accountToken, user) =>
+    db.users.update(user.id, { account_token: accountToken }),
+  clearToken: async (req, user) => db.users.update(user.id, { account_token: null }),
   onLink:     async (req, token, email, user) => {           // optional
     // `email` is the verified Legendum account email
     await sendWelcomeEmail(email);
@@ -142,7 +146,7 @@ User generates a `lak_…` on legendum.co.uk and pastes it once.
 
 ```ts
 const { account_token, email } = await legendum.linkAccount(accountKey);
-// Persist `account_token` on the user row (e.g. as legendum_token). Discard the lak_.
+// Persist `account_token` against the user/agent (your DB column may use another name). Discard the lak_.
 ```
 
 Notes:
@@ -239,7 +243,7 @@ Every async method throws. `err.code`, `err.message`, `err.status`.
 
 ## 6. Recipe: integrating into a new service in 8 steps
 
-1. **Copy** `legendum.js` → `src/lib/legendum.js`. Add `legendum.d.ts` if TypeScript.
+1. **Copy** `legendum.js` and `legendum.md` from `public/sdk/` → e.g. `src/lib/`. Add `legendum.d.ts` if TypeScript.
 2. **Register** the service with Legendum: get `lpk_…`/`lsk_…`, register `redirectUri` if using OAuth.
 3. **Add env vars** + an `isConfigured()` check at startup. Gate billing on it so dev environments work without credentials.
 4. **Pick a linking flow** (§3). Persist the token on the user row. Implement `clearToken`.
@@ -255,6 +259,7 @@ Every async method throws. `err.code`, `err.message`, `err.status`.
 - **Browser security:** never put `LEGENDUM_SECRET` in the page. If `linkController` is configured with `opts.client`, that client must run server-side. Prefer `mountAt` + middleware so the secret stays on the server.
 - **Tokens can be revoked remotely.** A user revoking their Legendum account key (`lak_…`) on legendum.co.uk deactivates *every* service link that was created via that key (i.e. via `linkAccount` — §3.3). OAuth and popup-pairing links survive. The symptom is a previously-working `account_token` suddenly returning `token_not_found` (404) on `charge`/`balance`. This is **not** a bug — it's the user severing the credential. Recovery is automatic if you've implemented `clearToken` (§3.2/§5): the middleware `/status` route catches the 404, fires `clearToken`, and your UI prompts the user to re-link. If you're not using middleware, handle `token_not_found` yourself wherever you call `charge`/`balance`.
 - **Tokens change on re-link.** Each link flow (OAuth, popup, paste-a-key) generates a fresh `account_token`, overwriting the previous one in Legendum's `account_services` table. The old token is dead — billing calls with it will fail. Always update your stored token on login/re-link. Never use the token as a user identity key; use `email` instead.
+- **Email changes at Legendum.** Changing verified email on legendum.co.uk does **not** invalidate an existing service link or `account_token`. It *can* leave your database out of date if you keyed display or support on an email captured once at signup. Successful **`charge`** and **`settle`** payloads include **`email`** — the verified address Legendum used for that debit. Services that care about an up-to-date identity should treat that field as authoritative when present (e.g. update the user row when it differs). The next **`exchangeCode`** after login also returns the current email; billing responses help you stay in sync between logins.
 - **Token race:** two concurrent links for the same user produce two tokens; second `setToken` wins. Either lock per-user or accept the orphan (it still works).
 - **Reservations across restarts:** don't try to recover them. Held credits expire on Legendum's side after 15 min. Just let them expire.
 - **Tab lifetime:** tabs must live for the *process*, not the request. Store them in a module-level `Map<token, tab>` and reuse across calls. A per-request tab drops its sub-1 remainder on every `close()` and bleeds dust continuously — see §4.3. Wire `close()` only to process-shutdown hooks (SIGTERM/SIGINT), never to request-end.
@@ -303,3 +308,42 @@ UI helpers
 ```
 
 The Ruby SDK (`legendum.rb`) mirrors the same API. Method names match where idiomatic.
+
+---
+
+## 9. Where does the account token come from?
+
+The **account token** (the opaque string you pass to `charge`, `balance`, `reserve`, and `tab`) is **created when your service is linked** to the user’s Legendum account. It is **not** the user’s account key (`lak_…`). On the wire, Legendum always names this value **`account_token`** in JSON (OAuth, pairing, and `linkAccount` responses). Your database column can use a different name (e.g. `legendum_token`) if you prefer — map at the boundary when you persist.
+
+### HTTP / JSON (`account_token` on the wire)
+
+If you call Legendum’s **REST API** directly (or read raw requests/responses), use this field name consistently:
+
+| Surface | Name |
+|---------|------|
+| OAuth exchange JSON (`POST /api/auth/token`) | **`account_token`** |
+| Agent link-service JSON (`POST /api/agent/link-service`) | **`account_token`** |
+| Pairing poll (`GET /api/link/:requestId`) | **`account_token`** |
+| Balance query (`GET /api/balance`) | **`account_token`** (query parameter) |
+| Charge / reserve / settle / release request bodies | **`account_token`** |
+
+### Methods that **give you** an account token (to store)
+
+| Flow | Method | When you get a token |
+|------|--------|----------------------|
+| **OAuth** (Login with Legendum or login-and-link) | `exchangeCode(code, redirectUri)` | When `linked` is true — field is **`account_token`**. |
+| **Pairing** (popup / `linkController` + middleware) | `pollLink(requestId)` or `waitForLink(requestId)` | When `status === "confirmed"` — field is **`account_token`**. Middleware `POST …/confirm` surfaces the same. |
+| **Paste-a-key** (CLI, agents) | `linkAccount(accountKey)` | Always on success — field is **`account_token`** (plus `email`). |
+
+### Methods that **do not** return an account token
+
+- **`authUrl`** / **`authAndLinkUrl`** — return only a **URL string**. The token appears **after** the user returns to your app and you call **`exchangeCode`** (or after pairing completes and you **`pollLink`**).
+- **`requestLink`** — returns a **pairing `code`** and `request_id`, not the billing token. The account token arrives once the user confirms at Legendum and **`pollLink`** reports `confirmed`.
+- **`charge`**, **`balance`**, **`reserve`**, **`tab`** — **consume** an account token you already have; they do not issue a new link. (Responses may include `email` for the transaction — that is not the token.)
+
+### `account(lak_…)` vs the account token
+
+- **`account(accountKey)`** builds a client that uses the user’s **Legendum account key** (`lak_…`) for **agent** endpoints (`whoami`, agent `balance`, `link`, etc.) — see §3.4.
+- That **`lak_…` is not** the per-service **`account_token`** stored for **your** service’s billing. For billing your product, use the token from **`exchangeCode`**, **`linkAccount`**, or confirmed **`pollLink`**.
+
+For architectural choices (OAuth vs pairing vs paste-a-key), see [patterns.md](patterns.md).
