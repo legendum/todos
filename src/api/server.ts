@@ -146,7 +146,7 @@ export default {
     // SSE
     const sseMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/events$/);
     if (sseMatch && method === "GET") {
-      return addCors(webhookHandlers.sseStream(sseMatch[1]));
+      return addCors(webhookHandlers.sseStream(sseMatch[1], req.signal));
     }
 
     // --- Static assets ---

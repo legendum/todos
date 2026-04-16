@@ -127,13 +127,42 @@ function installSkill(): void {
   console.log("\nInstalled todos skill for Claude Code and Cursor.");
 }
 
+function printHelp(): void {
+  console.log(`todos — sync a local todos.md with your webhook
+
+Usage:
+  todos                    list todos (numbered)
+  todos <text>             add a todo
+  todos done <n> [...]     mark position(s) done
+  todos undo <n> [...]     mark position(s) not done
+  todos del|delete <n>     delete todo at position
+  todos first <n> [...]    move position(s) to the top
+  todos last <n> [...]     move position(s) to the bottom
+  todos open               open this category in the browser
+  todos skill              install agent skill for Claude Code / Cursor
+  todos help               show this message
+
+First run: set TODOS_WEBHOOK in .env or you will be prompted.
+`);
+}
+
 async function main() {
+  const args = process.argv.slice(2);
+  if (
+    args.length === 1 &&
+    (args[0] === "--help" ||
+      args[0] === "-h" ||
+      args[0].toLowerCase() === "help")
+  ) {
+    printHelp();
+    return;
+  }
+
   let webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     webhookUrl = promptWebhookUrl();
   }
 
-  const args = process.argv.slice(2);
   const command = args[0]?.toLowerCase();
   const positions = args
     .slice(1)

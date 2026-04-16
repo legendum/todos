@@ -63,6 +63,7 @@ todos               # list todos
 | `todos last <n>...` | Move todos to the bottom |
 | `todos open` | Open `todos.in/<category>` in the default browser |
 | `todos skill` | Install the agent skill to `~/.claude/skills/todos/` and `~/.cursor/skills/todos/` |
+| `todos help` / `todos --help` | Show commands (no webhook required) |
 
 Every command syncs `todos.md` with the server first, applies the edit, then syncs again. Direct edits to `todos.md` by hand are picked up on the next run.
 
@@ -208,12 +209,26 @@ bun run start
 
 Without `LEGENDUM_API_KEY`, the server runs in **self-hosted mode**: no login, no billing, no document-size or todo-count limits. Everything is free and unlimited.
 
+### Backup
+
+All category data lives in a single SQLite file (`TODOS_DB_PATH`, default `data/todos.db`). To back up: stop the server and copy that file. To restore: replace the file and start again.
+
+### Environment template
+
+See [`.env.example`](.env.example) for optional server and Legendum variables (the CLI uses `TODOS_WEBHOOK` in each project’s `.env`).
+
 ## Development
 
 ### Prerequisites
 
 - [Bun](https://bun.sh/) runtime (handles runtime, backend, frontend bundling, scripts, and CLI — no Node, npm, or Vite)
 - SQLite (via `bun:sqlite`, bundled with Bun)
+
+### Pre-flight check
+
+```bash
+bun run smoke    # lint + test + production build (same as CI-style sanity check)
+```
 
 ### Setup
 
@@ -230,6 +245,8 @@ bun run dev    # hot-reload server + web build
 bun test       # run tests
 bun run lint   # biome check
 ```
+
+`bun run dev` runs the API with **`--hot`**: when you save a file the process restarts and open **EventSource** connections (`/w/…/events`) drop until you refresh. The server sends periodic SSE keep-alives so an **idle** tab (no edits, no webhook traffic) stays connected instead of hitting typical ~60–120s network idle timeouts.
 
 ### Build
 

@@ -312,6 +312,23 @@ body {
   flex-direction: column;
   gap: 2px;
 }
+.header-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.header-icon-btn:hover {
+  color: #e2e8f0;
+  border-color: #475569;
+}
 .screen-title {
   font-size: 18px;
   font-weight: 600;

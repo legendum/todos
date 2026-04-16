@@ -77,29 +77,75 @@ export async function replaceWebhookTodos(
   });
 }
 
+/** Interval for SSE comment pings — avoids idle TCP/proxy timeouts (~60–120s) with no todo updates. */
+const SSE_HEARTBEAT_MS = 20_000;
+
 /** GET /w/:ulid/events — SSE stream */
-export function sseStream(ulid: string): Response {
+export function sseStream(ulid: string, signal?: AbortSignal): Response {
   const row = findByUlid(ulid);
   if (!row) return json({ error: "not_found" }, 404);
+
+  let unsubscribe: (() => void) | undefined;
+  let onAbort: (() => void) | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
 
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
 
-      // Send initial state
-      const initial = formatSSE(row.text);
-      controller.enqueue(encoder.encode(initial));
+      const close = () => {
+        if (heartbeat !== undefined) {
+          clearInterval(heartbeat);
+          heartbeat = undefined;
+        }
+        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        unsubscribe?.();
+        unsubscribe = undefined;
+        onAbort = undefined;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      };
 
-      // Subscribe to updates
-      const unsubscribe = subscribe(ulid, (text) => {
+      controller.enqueue(encoder.encode(formatSSE(row.text)));
+
+      // Comment lines — ignored by EventSource; keeps chunked responses flowing past idle timeouts.
+      heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode("\n: keep-alive\n\n"));
+        } catch {
+          close();
+        }
+      }, SSE_HEARTBEAT_MS);
+
+      unsubscribe = subscribe(ulid, (text) => {
         try {
           controller.enqueue(encoder.encode(formatSSE(text)));
         } catch {
-          unsubscribe();
+          close();
         }
       });
 
-      // Clean up when client disconnects (detected by error on enqueue)
+      if (signal) {
+        if (signal.aborted) {
+          close();
+          return;
+        }
+        onAbort = () => close();
+        signal.addEventListener("abort", onAbort);
+      }
+    },
+    cancel() {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+      unsubscribe?.();
+      unsubscribe = undefined;
+      onAbort = undefined;
     },
   });
 

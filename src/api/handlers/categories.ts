@@ -116,12 +116,12 @@ export async function createCategory(
   );
 }
 
-/** GET /:slug — get todos (supports content negotiation) */
+/** GET /:slug — get todos (supports content negotiation). `null` means serve SPA HTML. */
 export function getTodos(
   req: Request,
   categorySlug: string,
   userId: number,
-): Response {
+): Response | null {
   const db = getDb();
 
   // Strip extension for content negotiation
@@ -171,7 +171,7 @@ export function getTodos(
   }
 
   // HTML — return null to signal the server should serve the SPA
-  return null as any;
+  return null;
 }
 
 /** PUT or POST /:slug — replace all todos */

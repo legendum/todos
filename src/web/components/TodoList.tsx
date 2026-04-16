@@ -33,6 +33,7 @@ import CopyIcon from "./CopyIcon";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
+import ShareIcon from "./ShareIcon";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 /** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
@@ -249,6 +250,49 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     [pushToServer],
   );
 
+  const shareMarkdown = useCallback(async () => {
+    const text = serializeLines(lines);
+    const safeSlug = category.slug.replace(/[^\w.-]+/g, "_") || "todos";
+    const filename = `${safeSlug}.md`;
+    const file = new File([text], filename, { type: "text/markdown" });
+
+    const userCancelledShare = (e: unknown) =>
+      e instanceof DOMException && e.name === "AbortError";
+
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: category.name });
+        return;
+      } catch (e) {
+        if (userCancelledShare(e)) return;
+      }
+    }
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: `${category.name} — todos`,
+          text,
+        });
+        return;
+      } catch (e) {
+        if (userCancelledShare(e)) return;
+      }
+    }
+
+    const url = URL.createObjectURL(
+      new Blob([text], { type: "text/markdown;charset=utf-8" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2500);
+  }, [lines, category.name, category.slug]);
+
   const toggleDone = (index: number) => {
     updateLines((prev) =>
       prev.map((l, i) => {
@@ -354,13 +398,14 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     const overId = String(over.id);
     if (activeId === overId) return;
 
-    const oldIndex = lines.findIndex((l) => l.id === activeId);
-    const newIndex = lines.findIndex((l) => l.id === overId);
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const next = arrayMove(lines, oldIndex, newIndex);
-    setLines(next);
-    pushToServer(next);
+    setLines((prev) => {
+      const oldIndex = prev.findIndex((l) => l.id === activeId);
+      const newIndex = prev.findIndex((l) => l.id === overId);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      pushToServer(next);
+      return next;
+    });
   }
 
   const draggedLine = activeDragId
@@ -435,6 +480,15 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
             )}
           </div>
         </div>
+        <button
+          type="button"
+          className="header-icon-btn"
+          title="Share or export markdown"
+          aria-label="Share or export markdown"
+          onClick={() => void shareMarkdown()}
+        >
+          <ShareIcon />
+        </button>
       </div>
 
       {!online && (
