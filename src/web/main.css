@@ -459,11 +459,7 @@ body {
 .todo-text.done .text-inline-link {
   color: #94a3b8;
 }
-/* Task line body: same ReactMarkdown output as .md-block, without block margins */
-.todo-text .todo-md-p {
-  margin: 0;
-}
-.todo-text .todo-markdown code {
+.todo-text code {
   font-size: 0.9em;
   background: #1e293b;
   padding: 0.12em 0.4em;

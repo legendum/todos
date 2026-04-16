@@ -1,33 +1,27 @@
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 
-const blockComponents: Components = {
-  a: ({ href, children }) => (
+function markdownLink(stopPropagation: boolean): NonNullable<Components["a"]> {
+  return ({ href, children }) => (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       className="text-inline-link"
+      onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
     >
       {children}
     </a>
-  ),
+  );
+}
+
+const blockComponents: Components = {
+  a: markdownLink(false),
 };
 
 const todoComponents: Components = {
-  ...blockComponents,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-inline-link"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-    </a>
-  ),
-  p: ({ children }) => <span className="todo-md-p">{children}</span>,
+  a: markdownLink(true),
+  p: ({ children }) => <span>{children}</span>,
 };
 
 /** Read-only markdown for free-form lines in todos.md (headings, notes, etc.). */
@@ -44,10 +38,8 @@ export default function MarkdownBlock({ text }: { text: string }) {
 /** Inline markdown for task line text (bold, links, etc.), matching {@link MarkdownBlock}. */
 export function TodoMarkdownText({ text }: { text: string }) {
   return (
-    <span className="todo-markdown">
-      <ReactMarkdown components={todoComponents}>
-        {text || "\u00a0"}
-      </ReactMarkdown>
-    </span>
+    <ReactMarkdown components={todoComponents}>
+      {text || "\u00a0"}
+    </ReactMarkdown>
   );
 }
