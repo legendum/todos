@@ -31,7 +31,7 @@ import {
 import { patchCategoryName } from "../patchCategoryName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
-import MarkdownBlock from "./MarkdownBlock";
+import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 /** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
@@ -80,33 +80,6 @@ function serializeLines(lines: Line[]): string {
       : { isTodo: false, raw: l.text },
   );
   return serializeContent(mapped);
-}
-
-/** Split on http(s) URLs and render anchors that open in a new tab. */
-const URL_IN_TEXT = /(https?:\/\/[^\s]+)/g;
-
-function TextWithLinks({ text }: { text: string }) {
-  const parts = text.split(URL_IN_TEXT);
-  return (
-    <span className="text-with-links">
-      {parts.map((part, i) =>
-        /^https?:\/\//.test(part) ? (
-          <a
-            key={i}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-inline-link"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
-    </span>
-  );
 }
 
 type Props = {
@@ -510,7 +483,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
                     <span
                       className={`todo-text${draggedLine.done ? " done" : ""}`}
                     >
-                      <TextWithLinks text={draggedLine.text} />
+                      <TodoMarkdownText text={draggedLine.text} />
                     </span>
                   </div>
                 ) : (
@@ -638,7 +611,7 @@ function TodoSortableRow({
         {line.done && <CheckIcon />}
       </button>
       <span className={`todo-text${line.done ? " done" : ""}`}>
-        <TextWithLinks text={line.text} />
+        <TodoMarkdownText text={line.text} />
       </span>
     </div>
   );
