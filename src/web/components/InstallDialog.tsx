@@ -1,17 +1,42 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import CopyIcon from "./CopyIcon";
+
+const INSTALL_CMD = "curl -fsSL https://todos.in/install.sh | sh";
+const COPY_ACK_MS = 850;
 
 type Props = {
   onClose: () => void;
 };
 
 export default function InstallDialog({ onClose }: Props) {
+  const [installCopiedFlash, setInstallCopiedFlash] = useState(false);
+  const copyFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (copyFlashTimer.current) clearTimeout(copyFlashTimer.current);
+    };
   }, [onClose]);
+
+  async function copyInstallCommand() {
+    try {
+      await navigator.clipboard.writeText(INSTALL_CMD);
+      if (copyFlashTimer.current) clearTimeout(copyFlashTimer.current);
+      setInstallCopiedFlash(true);
+      copyFlashTimer.current = setTimeout(() => {
+        setInstallCopiedFlash(false);
+        copyFlashTimer.current = null;
+      }, COPY_ACK_MS);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
@@ -24,10 +49,25 @@ export default function InstallDialog({ onClose }: Props) {
 
         <div className="dialog-body">
           <section className="dialog-section">
-            <h3>1. Install</h3>
-            <pre className="dialog-code">
-              curl -fsSL https://todos.in/install.sh | sh
-            </pre>
+            <div className="dialog-section-head">
+              <h3>1. Install</h3>
+              {installCopiedFlash ? (
+                <span className="dialog-copy-hint" role="status">
+                  Copied
+                </span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className={`dialog-code dialog-code--install${installCopiedFlash ? " dialog-code--flash" : ""}`}
+              onClick={copyInstallCommand}
+              aria-label="Copy install command"
+            >
+              <span className="dialog-code-install-icon" aria-hidden="true">
+                <CopyIcon />
+              </span>
+              {INSTALL_CMD}
+            </button>
           </section>
 
           <section className="dialog-section">
