@@ -59,14 +59,14 @@ export default function InstallDialog({ onClose }: Props) {
             </div>
             <button
               type="button"
-              className={`dialog-code dialog-code--install${installCopiedFlash ? " dialog-code--flash" : ""}`}
+              className={`dialog-code-install-wrap${installCopiedFlash ? " dialog-code--flash" : ""}`}
               onClick={copyInstallCommand}
               aria-label="Copy install command"
             >
+              <span className="dialog-code-install-scroll">{INSTALL_CMD}</span>
               <span className="dialog-code-install-icon" aria-hidden="true">
                 <CopyIcon />
               </span>
-              {INSTALL_CMD}
             </button>
           </section>
 
