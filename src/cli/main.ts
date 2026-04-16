@@ -143,6 +143,10 @@ Usage:
   todos help               show this message
 
 First run: set TODOS_WEBHOOK in .env or you will be prompted.
+
+Webhook URL: open https://todos.in, choose a todo list, then tap or click the
+/w/… line under the category name at the top — it copies the webhook to your
+clipboard. Paste that into TODOS_WEBHOOK in your project .env.
 `);
 }
 
