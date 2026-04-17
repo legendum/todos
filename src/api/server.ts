@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
-import { closeTabs } from "../lib/billing.js";
 import { setAuthCookieHeader } from "../lib/auth.js";
+import { closeTabs } from "../lib/billing.js";
 import { getDb } from "../lib/db.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
 import { requireAuthAsync } from "./auth-middleware.js";
@@ -328,7 +328,7 @@ export default {
       return await serveIndex();
     }
 
-    // Bearer lak_ → link + session cookie (no prior login). Must run before requireAuth.
+    // POST link-key: Bearer lak_ only → account_token + optional session cookie. Must run before requireAuth.
     if (
       legendumMiddleware &&
       path === "/t/legendum/link-key" &&
@@ -343,9 +343,9 @@ export default {
         const email = data.email;
         if (email) {
           const db = getDb();
-          const row = db.query("SELECT id FROM users WHERE email = ?").get(email) as
-            | { id: number }
-            | undefined;
+          const row = db
+            .query("SELECT id FROM users WHERE email = ?")
+            .get(email) as { id: number } | undefined;
           if (row) {
             const headers = new Headers({
               "Content-Type": "application/json",

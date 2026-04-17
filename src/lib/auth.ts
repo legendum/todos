@@ -32,12 +32,7 @@ export function verifySessionCookie(cookie: string): number | null {
 }
 
 export function getUserIdFromRequest(req: Request): number | null {
-  // Check Bearer token first (Legendum account key)
-  const authHeader = req.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    // Account key auth is handled at a higher level; this is for cookie auth
-  }
-
+  // Bearer `account_token` auth is handled in auth-middleware (`getAuthUserIdWithBearer`).
   const cookie = req.headers.get("Cookie");
   if (!cookie) return null;
   const match = cookie.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));

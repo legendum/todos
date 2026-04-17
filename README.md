@@ -129,7 +129,7 @@ All category routes support content negotiation: HTML (browsers), `text/markdown
 | `POST /auth/logout` | Unset session cookie |
 | `/t/legendum/*` | Legendum middleware (link/unlink/billing widget) |
 
-### Categories & todos (authenticated — cookie or `Authorization: Bearer <lak_...>`)
+### Categories & todos (authenticated — session cookie, or `Authorization: Bearer <account_token>` from link-key; not `lak_` on these routes)
 
 | Route | Description |
 |-------|-------------|

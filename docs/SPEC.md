@@ -131,7 +131,7 @@ A skill file (e.g. `config/SKILL.md` installed to `~/.claude/skills/todos/SKILL.
 
 ### 2.9 Tool integration (chats2me)
 
-External tools like chats2me access the authenticated API using a Legendum account key (`lak_...`) as a bearer token. The API uses clean category-name routes matching the `todos.in/<name>` pattern:
+External tools like chats2me obtain a per-service **`account_token`** via **`POST /t/legendum/link-key`** with **`Authorization: Bearer <lak_…>`**, store it, then call category routes with **`Authorization: Bearer <account_token>`** — not `lak_` on those URLs. The API uses clean category-name routes matching the `todos.in/<name>` pattern:
 
 - `GET /` — list all categories
 - `GET /:category` — get todos (returns `todos.md` format, or JSON via content negotiation)
@@ -247,7 +247,7 @@ When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no l
 
 ## 6. API (REST)
 
-**Auth**: All authenticated endpoints accept **cookie** (browser; encrypted) or **Authorization: Bearer \<token\>** (Legendum account key).
+**Auth**: All authenticated endpoints accept **cookie** (browser; encrypted) or **Authorization: Bearer \<account_token\>** (opaque token from **`POST …/link-key`**, stored server-side as `legendum_token`). **`lak_`** is only for the link-key exchange, not for category CRUD.
 
 ### Auth & Legendum
 

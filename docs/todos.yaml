@@ -13,11 +13,14 @@ service:
 server:
   base_url: https://todos.in
 
-# Authentication: Chats2Me decrypts the user's Legendum account key
-# (users.legendum_account_key_encrypted) and sends it as a Bearer token.
+# Authentication: lak_ is used only for POST …/link-key (auth.link). Chats2Me stores
+# account_token in user_service_links and sends it as Bearer on tool HTTP — see docs/TOOLS.md.
 auth:
   type: bearer
   source: legendum_account_key
+  link:
+    path: /t/legendum/link-key
+    method: POST
 
 # Response format conventions:
 #   - Actions path:     append .md to the URL → service returns markdown
