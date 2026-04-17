@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { closeTabs } from "../lib/billing.js";
+import { setAuthCookieHeader } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
 import { requireAuthAsync } from "./auth-middleware.js";
@@ -42,6 +43,33 @@ const legendumMiddleware = legendumSdk.isConfigured()
       clearToken: async (_req: Request, userId: string) => {
         const db = getDb();
         db.run("UPDATE users SET legendum_token = NULL WHERE id = ?", userId);
+      },
+      onLinkKey: async (
+        _req: Request,
+        accountToken: string,
+        email: string | null,
+      ) => {
+        if (!email) return;
+        const db = getDb();
+        let row = db.query("SELECT id FROM users WHERE email = ?").get(email) as
+          | { id: number }
+          | undefined;
+        if (!row) {
+          db.run(
+            "INSERT INTO users (email, legendum_token) VALUES (?, ?)",
+            email,
+            accountToken,
+          );
+          row = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
+            id: number;
+          };
+        } else {
+          db.run(
+            "UPDATE users SET legendum_token = ? WHERE id = ?",
+            accountToken,
+            row.id,
+          );
+        }
       },
     })
   : null;
@@ -298,6 +326,44 @@ export default {
 
     if (isPageNavigation) {
       return await serveIndex();
+    }
+
+    // Bearer lak_ → link + session cookie (no prior login). Must run before requireAuth.
+    if (
+      legendumMiddleware &&
+      path === "/t/legendum/link-key" &&
+      method === "POST"
+    ) {
+      const legendumRes = await legendumMiddleware(req);
+      if (legendumRes?.status === 200) {
+        const data = (await legendumRes.json()) as {
+          account_token: string;
+          email?: string;
+        };
+        const email = data.email;
+        if (email) {
+          const db = getDb();
+          const row = db.query("SELECT id FROM users WHERE email = ?").get(email) as
+            | { id: number }
+            | undefined;
+          if (row) {
+            const headers = new Headers({
+              "Content-Type": "application/json",
+            });
+            headers.append("Set-Cookie", setAuthCookieHeader(row.id));
+            return addCors(
+              new Response(JSON.stringify(data), { status: 200, headers }),
+            );
+          }
+        }
+        return addCors(
+          new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return addCors(legendumRes!);
     }
 
     // Everything below requires auth
