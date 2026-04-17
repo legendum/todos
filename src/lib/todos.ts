@@ -134,14 +134,5 @@ export function serializeContent(lines: ParsedLine[]): string {
     }
     return l.raw;
   });
-  let out = parts[0] ?? "";
-  for (let i = 1; i < parts.length; i++) {
-    const next = parts[i];
-    if (out.endsWith("\n")) {
-      out += next;
-    } else {
-      out += `\n${next}`;
-    }
-  }
-  return `${out}\n`;
+  return `${parts.join("\n")}\n`;
 }

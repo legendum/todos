@@ -85,6 +85,14 @@ describe("parseContent / serializeContent", () => {
     const input = "[ ] one\n[x] two";
     expect(serializeContent(parseContent(input))).toBe(`${input}\n`);
   });
+
+  test("preserves blank lines between todos and around prose", () => {
+    const betweenTodos = "- [ ] a\n\n- [ ] b\n";
+    expect(serializeContent(parseContent(betweenTodos))).toBe(betweenTodos);
+
+    const headingGap = "## Title\n\n- [ ] task\n";
+    expect(serializeContent(parseContent(headingGap))).toBe(headingGap);
+  });
 });
 
 describe("toSlug", () => {

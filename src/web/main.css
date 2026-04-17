@@ -202,6 +202,14 @@ body {
   border-left: 3px solid #475569;
   color: #cbd5e1;
 }
+.md-block .text-inline-link {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-block .text-inline-link:hover {
+  color: #93c5fd;
+}
 
 /* Draggable markdown row (no swipe actions) — align with .todo-row */
 .md-sortable-inner {

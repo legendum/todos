@@ -1,5 +1,6 @@
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 function markdownLink(stopPropagation: boolean): NonNullable<Components["a"]> {
   return ({ href, children }) => (
@@ -28,7 +29,7 @@ const todoComponents: Components = {
 export default function MarkdownBlock({ text }: { text: string }) {
   return (
     <div className="md-block">
-      <ReactMarkdown components={blockComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={blockComponents}>
         {text || "\u00a0"}
       </ReactMarkdown>
     </div>
@@ -38,7 +39,7 @@ export default function MarkdownBlock({ text }: { text: string }) {
 /** Inline markdown for task line text (bold, links, etc.), matching {@link MarkdownBlock}. */
 export function TodoMarkdownText({ text }: { text: string }) {
   return (
-    <ReactMarkdown components={todoComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={todoComponents}>
       {text || "\u00a0"}
     </ReactMarkdown>
   );
