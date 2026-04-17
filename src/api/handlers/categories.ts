@@ -174,7 +174,7 @@ export function getTodos(
   return null;
 }
 
-/** PUT or POST /:slug — replace all todos */
+/** PUT or POST /:slug — replace all todos (raw markdown or JSON `{ markdown }` / `{ text }`). */
 export async function replaceTodos(
   req: Request,
   categorySlug: string,
@@ -189,7 +189,42 @@ export async function replaceTodos(
 
   if (!row) return json({ error: "not_found" }, 404);
 
-  const text = await req.text();
+  const ct = req.headers.get("Content-Type") ?? "";
+  let text: string;
+  if (ct.includes("application/json")) {
+    let parsed: unknown;
+    try {
+      parsed = await req.json();
+    } catch {
+      return json({ error: "invalid_request", message: "Invalid JSON" }, 400);
+    }
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "markdown" in parsed &&
+      typeof (parsed as { markdown: unknown }).markdown === "string"
+    ) {
+      text = (parsed as { markdown: string }).markdown;
+    } else if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "text" in parsed &&
+      typeof (parsed as { text: unknown }).text === "string"
+    ) {
+      text = (parsed as { text: string }).text;
+    } else {
+      return json(
+        {
+          error: "invalid_request",
+          message:
+            "JSON body must include a string markdown or text field (full document)",
+        },
+        400,
+      );
+    }
+  } else {
+    text = await req.text();
+  }
   const validationError = validateTodosText(text, isSelfHosted());
   if (validationError) {
     return json({ error: "invalid_request", message: validationError }, 400);

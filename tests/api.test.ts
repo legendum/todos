@@ -155,6 +155,56 @@ describe("API — self-hosted mode", () => {
     expect(data.done).toBe(1);
   });
 
+  test("PUT /:category accepts JSON { markdown }", async () => {
+    const text = "[ ] JSON body todo\n[x] Done via JSON";
+    const res = await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown: text }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.total).toBe(2);
+    expect(data.done).toBe(1);
+    const getRes = await fetch(`${base}/groceries.md`);
+    const body = await getRes.text();
+    expect(body).toContain("JSON body todo");
+    // Restore state for following tests (same as "PUT replaces todos" fixture)
+    await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: "## Shopping\n[ ] Milk\n[x] Bread\n[ ] Eggs",
+    });
+  });
+
+  test("PUT /:category accepts JSON { text } alias", async () => {
+    const text = "[ ] Via text key\n[x] Done";
+    const res = await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.total).toBe(2);
+    await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: "## Shopping\n[ ] Milk\n[x] Bread\n[ ] Eggs",
+    });
+  });
+
+  test("PUT /:category JSON without markdown or text returns 400", async () => {
+    const res = await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("invalid_request");
+  });
+
   test("GET /:category.md returns markdown", async () => {
     const res = await fetch(`${base}/groceries.md`);
     expect(res.status).toBe(200);
