@@ -155,6 +155,23 @@ describe("API — self-hosted mode", () => {
     expect(data.done).toBe(1);
   });
 
+  test("PUT /:category.json is the same route as PUT /:category (slug excludes extension)", async () => {
+    const text = "[ ] Via dot-json path\n[x] Done";
+    const res = await fetch(`${base}/groceries.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown: text }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.total).toBe(2);
+    await fetch(`${base}/groceries`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: "## Shopping\n[ ] Milk\n[x] Bread\n[ ] Eggs",
+    });
+  });
+
   test("PUT /:category accepts JSON { markdown }", async () => {
     const text = "[ ] JSON body todo\n[x] Done via JSON";
     const res = await fetch(`${base}/groceries`, {

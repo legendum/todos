@@ -89,6 +89,26 @@ function addCors(res: Response): Response {
   return r;
 }
 
+const CATEGORY_SLUG = "[a-zA-Z0-9][a-zA-Z0-9._-]*";
+
+/**
+ * `/slug`, `/slug.md`, or `/slug.json`. Two patterns are required: if `.` is
+ * allowed inside the slug, a single alternation would let `groceries.json`
+ * match as slug `groceries.json` with no extension (PUT would 404).
+ */
+function matchCategoryPath(path: string): {
+  slug: string;
+  ext?: "md" | "json";
+} | null {
+  const withExt = path.match(new RegExp(`^\\/(${CATEGORY_SLUG})\\.(md|json)$`));
+  if (withExt) {
+    return { slug: withExt[1], ext: withExt[2] as "md" | "json" };
+  }
+  const plain = path.match(new RegExp(`^\\/(${CATEGORY_SLUG})$`));
+  if (plain) return { slug: plain[1] };
+  return null;
+}
+
 /** Find the built JS bundle filename (content-hashed). */
 let bundleFile: string | null = null;
 async function getBundleFilename(): Promise<string | null> {
@@ -276,37 +296,34 @@ export default {
       }
 
       // Category routes
-      const catMatch = path.match(
-        /^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(md|json))?$/,
-      );
+      const catParsed = matchCategoryPath(path);
       if (
-        catMatch &&
+        catParsed &&
         !path.startsWith("/t/") &&
         !path.startsWith("/w/") &&
         !path.startsWith("/dist/")
       ) {
-        const catName = catMatch[1];
-        const ext = catMatch[2];
+        const { slug, ext } = catParsed;
 
         if (method === "GET") {
           const result = categoryHandlers.getTodos(
             req,
-            ext ? `${catName}.${ext}` : catName,
+            ext ? `${slug}.${ext}` : slug,
             userId,
           );
           if (result === null) return await serveIndex();
           return addCors(result);
         }
         if (method === "PUT" || method === "POST") {
-          res = await categoryHandlers.replaceTodos(req, catName, userId);
+          res = await categoryHandlers.replaceTodos(req, slug, userId);
           return addCors(res);
         }
         if (method === "PATCH") {
-          res = await categoryHandlers.renameCategory(req, catName, userId);
+          res = await categoryHandlers.renameCategory(req, slug, userId);
           return addCors(res);
         }
         if (method === "DELETE") {
-          return addCors(categoryHandlers.deleteCategory(catName, userId));
+          return addCors(categoryHandlers.deleteCategory(slug, userId));
         }
       }
 
@@ -394,41 +411,38 @@ export default {
     }
 
     // Category routes (authenticated)
-    const catMatch = path.match(
-      /^\/([a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\.(md|json))?$/,
-    );
+    const catParsed = matchCategoryPath(path);
     if (
-      catMatch &&
+      catParsed &&
       !path.startsWith("/t/") &&
       !path.startsWith("/w/") &&
       !path.startsWith("/dist/")
     ) {
-      const catName = catMatch[1];
-      const ext = catMatch[2];
+      const { slug, ext } = catParsed;
 
       if (method === "GET") {
         const result = categoryHandlers.getTodos(
           req,
-          ext ? `${catName}.${ext}` : catName,
+          ext ? `${slug}.${ext}` : slug,
           userId,
         );
         if (result === null) return await serveIndex();
         return addCors(result);
       }
       if (method === "PUT" || method === "POST") {
-        res = await categoryHandlers.replaceTodos(req, catName, userId);
+        res = await categoryHandlers.replaceTodos(req, slug, userId);
         return addCors(res);
       }
       if (method === "PATCH") {
-        res = await categoryHandlers.renameCategory(req, catName, userId);
+        res = await categoryHandlers.renameCategory(req, slug, userId);
         return addCors(res);
       }
       if (method === "DELETE") {
-        return addCors(categoryHandlers.deleteCategory(catName, userId));
+        return addCors(categoryHandlers.deleteCategory(slug, userId));
       }
     }
 
-    return addCors(json({ error: "not_found" }, 404));
+    return addCors(json({ error: "not_found", reason: "route" }, 404));
   },
 };
 

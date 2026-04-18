@@ -146,7 +146,7 @@ export function getTodos(
     )
     .get(userId, slug) as CategoryRow | undefined;
 
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "category" }, 404);
 
   if (format === "text") {
     return new Response(row.text, {
@@ -187,7 +187,7 @@ export async function replaceTodos(
     )
     .get(userId, categorySlug) as CategoryRow | undefined;
 
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "category" }, 404);
 
   const ct = req.headers.get("Content-Type") ?? "";
   let text: string;
@@ -260,7 +260,8 @@ export function deleteCategory(categorySlug: string, userId: number): Response {
     categorySlug,
   );
 
-  if (result.changes === 0) return json({ error: "not_found" }, 404);
+  if (result.changes === 0)
+    return json({ error: "not_found", reason: "category" }, 404);
   return json({ ok: true });
 }
 
@@ -289,7 +290,7 @@ export async function renameCategory(
     .query("SELECT id, slug FROM categories WHERE user_id = ? AND slug = ?")
     .get(userId, categorySlug) as CategoryRow | undefined;
 
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "category" }, 404);
 
   // Check slug uniqueness if slug changed
   if (newSlug !== row.slug) {
