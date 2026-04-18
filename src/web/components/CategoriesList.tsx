@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type CategoryListEntry,
   getCategoriesList,
@@ -39,6 +39,20 @@ export default function CategoriesList({ onSelect }: Props) {
   const [renameCategory, setRenameCategory] =
     useState<CategoryListEntry | null>(null);
   const [renameText, setRenameText] = useState("");
+  const [filterQuery, setFilterQuery] = useState("");
+
+  const filterTrim = filterQuery.trim().toLowerCase();
+  const filteredCategories = useMemo(() => {
+    if (!filterTrim) return categories;
+    return categories.filter(
+      (c) =>
+        c.name.toLowerCase().includes(filterTrim) ||
+        c.slug.toLowerCase().includes(filterTrim) ||
+        c.ulid.toLowerCase().includes(filterTrim),
+    );
+  }, [categories, filterTrim]);
+
+  const filterActive = filterTrim.length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -149,50 +163,116 @@ export default function CategoriesList({ onSelect }: Props) {
 
   return (
     <div className="screen">
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={categories.map((c) => c.slug)}
-          strategy={verticalListSortingStrategy}
-        >
-          <ul className="list">
-            {categories.map((cat) => (
-              <CategoryRow
-                key={cat.slug}
-                category={cat}
-                onSelect={() => onSelect(cat)}
-                onEdit={() => openRename(cat)}
-                onDelete={() => handleDelete(cat.slug)}
+      <div className="list-search-strip">
+        <label className="list-search" htmlFor="todos-category-list-filter">
+          <span className="list-search-icon" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="11"
+                cy="11"
+                r="7"
+                stroke="currentColor"
+                strokeWidth="2"
               />
-            ))}
-          </ul>
-        </SortableContext>
-
-        <DragOverlay>
-          {draggedCat ? (
-            <div className="drag-overlay">
-              <div className="list-item" style={{ borderBottom: "none" }}>
-                <DragHandle />
-                <div className="list-item-content">
-                  <div className="list-item-title">{draggedCat.name}</div>
-                </div>
-                <span className="cat-count">
-                  {draggedCat.done}/{draggedCat.total}
-                </span>
-              </div>
-            </div>
+              <path
+                d="M20 20l-3-3"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <input
+            id="todos-category-list-filter"
+            type="search"
+            className="list-search-input"
+            placeholder="Search lists…"
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="Filter lists by name or slug"
+            enterKeyHint="search"
+          />
+          {filterQuery ? (
+            <button
+              type="button"
+              className="list-search-clear"
+              onClick={() => setFilterQuery("")}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
           ) : null}
-        </DragOverlay>
-      </DndContext>
+        </label>
+      </div>
+
+      {filterActive ? (
+        <ul className="list">
+          {filteredCategories.map((cat) => (
+            <StaticCategoryRow
+              key={cat.slug}
+              category={cat}
+              onSelect={() => onSelect(cat)}
+              onEdit={() => openRename(cat)}
+              onDelete={() => handleDelete(cat.slug)}
+            />
+          ))}
+        </ul>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={categories.map((c) => c.slug)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="list">
+              {categories.map((cat) => (
+                <SortableCategoryRow
+                  key={cat.slug}
+                  category={cat}
+                  onSelect={() => onSelect(cat)}
+                  onEdit={() => openRename(cat)}
+                  onDelete={() => handleDelete(cat.slug)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+
+          <DragOverlay>
+            {draggedCat ? (
+              <div className="drag-overlay">
+                <div className="list-item" style={{ borderBottom: "none" }}>
+                  <DragHandle />
+                  <div className="list-item-content">
+                    <div className="list-item-title">{draggedCat.name}</div>
+                  </div>
+                  <span className="cat-count">
+                    {draggedCat.done}/{draggedCat.total}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
       {categories.length === 0 && !creating && (
         <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
           No categories yet. Tap + to create one.
         </p>
       )}
+
+      {categories.length > 0 &&
+        filterActive &&
+        filteredCategories.length === 0 && (
+          <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
+            No matches.
+          </p>
+        )}
 
       {creating && (
         <div className="form">
@@ -251,7 +331,7 @@ export default function CategoriesList({ onSelect }: Props) {
   );
 }
 
-function CategoryRow({
+function SortableCategoryRow({
   category,
   onSelect,
   onEdit,
@@ -288,6 +368,64 @@ function CategoryRow({
         <div className="row-main">
           <div className="list-item" style={{ borderBottom: "none" }}>
             <DragHandle listeners={listeners} />
+            <div className="list-item-content" style={{ marginLeft: 8 }}>
+              <div className="list-item-title">{category.name}</div>
+            </div>
+            <span className="cat-count">
+              {category.done}/{category.total}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="row-edit"
+          onClick={() => {
+            reset();
+            onEdit();
+          }}
+        >
+          Edit
+        </button>
+        <button type="button" className="row-delete" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/** Same row as sortable, without drag — used while the list is filtered (subset reorder would be ambiguous). */
+function StaticCategoryRow({
+  category,
+  onSelect,
+  onEdit,
+  onDelete,
+}: {
+  category: CategoryListEntry;
+  onSelect: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+    actionCount: 2,
+    onTap: onSelect,
+  });
+
+  return (
+    <li className="row-wrap">
+      <div className="row-slider" style={sliderStyle} {...slideHandlers}>
+        <div className="row-main">
+          <div className="list-item" style={{ borderBottom: "none" }}>
+            <div className="drag-handle drag-handle--static" aria-hidden>
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="5" cy="3" r="1.5" />
+                <circle cx="11" cy="3" r="1.5" />
+                <circle cx="5" cy="8" r="1.5" />
+                <circle cx="11" cy="8" r="1.5" />
+                <circle cx="5" cy="13" r="1.5" />
+                <circle cx="11" cy="13" r="1.5" />
+              </svg>
+            </div>
             <div className="list-item-content" style={{ marginLeft: 8 }}>
               <div className="list-item-title">{category.name}</div>
             </div>
