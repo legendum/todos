@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CategoryListEntry,
   getCategoriesList,
@@ -40,6 +40,7 @@ export default function CategoriesList({ onSelect }: Props) {
     useState<CategoryListEntry | null>(null);
   const [renameText, setRenameText] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
   const filterTrim = filterQuery.trim().toLowerCase();
   const filteredCategories = useMemo(() => {
@@ -78,6 +79,14 @@ export default function CategoriesList({ onSelect }: Props) {
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
+
+  /** Home list only: move focus to filter so typing narrows the list immediately. */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      filterInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   useEffect(() => {
     const onSync = () => {
@@ -183,6 +192,7 @@ export default function CategoriesList({ onSelect }: Props) {
             </svg>
           </span>
           <input
+            ref={filterInputRef}
             id="todos-category-list-filter"
             type="search"
             className="list-filter-input"
