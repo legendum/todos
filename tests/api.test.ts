@@ -102,11 +102,15 @@ describe("API — self-hosted mode", () => {
   test("GET / lists categories", async () => {
     const { status, body } = await jsonGet("/");
     expect(status).toBe(200);
-    expect(body.categories.length).toBe(2);
-    expect(body.categories[0].name).toBe("groceries");
-    expect(body.categories[0].slug).toBe("groceries");
-    expect(typeof body.categories[0].updated_at).toBe("number");
-    expect(body.categories[1].slug).toBe("my-shopping-list");
+    expect(body.categories.length).toBe(4);
+    const bySlug = Object.fromEntries(
+      body.categories.map((c: { slug: string }) => [c.slug, c]),
+    );
+    expect(bySlug.today?.name).toBe("Today");
+    expect(bySlug.ideas?.name).toBe("Ideas");
+    expect(bySlug.groceries?.name).toBe("groceries");
+    expect(typeof bySlug.groceries?.updated_at).toBe("number");
+    expect(bySlug["my-shopping-list"]?.name).toBe("My Shopping List");
   });
 
   test("GET / list updated_at does not go backwards after PUT", async () => {
@@ -254,7 +258,9 @@ describe("API — self-hosted mode", () => {
   test("webhook GET returns todos", async () => {
     // Get ulid
     const { body } = await jsonGet("/");
-    const ulid = body.categories[0].ulid;
+    const ulid = body.categories.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    ).ulid;
 
     const res = await fetch(`${base}/w/${ulid}`);
     expect(res.status).toBe(200);
@@ -266,7 +272,9 @@ describe("API — self-hosted mode", () => {
 
   test("webhook PUT replaces todos", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories[0].ulid;
+    const ulid = body.categories.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    ).ulid;
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "PUT",
@@ -283,7 +291,9 @@ describe("API — self-hosted mode", () => {
 
   test("webhook POST also replaces (same as PUT)", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories[0].ulid;
+    const ulid = body.categories.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    ).ulid;
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "POST",
@@ -309,7 +319,9 @@ describe("API — self-hosted mode", () => {
     const res = await fetch(`${base}/t/reorder`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order: ["work", "groceries"] }),
+      body: JSON.stringify({
+        order: ["work", "groceries", "today", "ideas"],
+      }),
     });
     expect(res.status).toBe(200);
 
@@ -323,8 +335,11 @@ describe("API — self-hosted mode", () => {
     expect(res.status).toBe(200);
 
     const { body } = await jsonGet("/");
-    expect(body.categories.length).toBe(1);
-    expect(body.categories[0].name).toBe("groceries");
+    expect(body.categories.length).toBe(3);
+    const names = body.categories.map((c: { name: string }) => c.name);
+    expect(names).toContain("groceries");
+    expect(names).toContain("Today");
+    expect(names).toContain("Ideas");
   });
 
   test("free-form text is preserved", async () => {
@@ -356,7 +371,9 @@ Context: we need to ship by Friday
 
   test("SSE endpoint returns event stream", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories[0].ulid;
+    const ulid = body.categories.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    ).ulid;
 
     const res = await fetch(`${base}/w/${ulid}/events`);
     expect(res.status).toBe(200);

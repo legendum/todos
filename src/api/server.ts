@@ -3,6 +3,7 @@ import { setAuthCookieHeader } from "../lib/auth.js";
 import { closeTabs } from "../lib/billing.js";
 import { getDb } from "../lib/db.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
+import { seedDefaultCategoriesForNewUser } from "../lib/seed-default-categories.js";
 import { requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
@@ -63,6 +64,7 @@ const legendumMiddleware = legendumSdk.isConfigured()
           row = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
             id: number;
           };
+          seedDefaultCategoriesForNewUser(row.id);
         } else {
           db.run(
             "UPDATE users SET legendum_token = ? WHERE id = ?",
@@ -272,6 +274,7 @@ export default {
       if (!user) {
         db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
         user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
+        seedDefaultCategoriesForNewUser(user.id);
       }
       const userId = user.id;
 
