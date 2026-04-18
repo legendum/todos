@@ -11,7 +11,7 @@ export function getMe(userId: number): Response {
       }
     | undefined;
 
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "user" }, 404);
 
   return json({
     legendum_linked: !!row.legendum_token,

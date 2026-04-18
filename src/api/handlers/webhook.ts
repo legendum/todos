@@ -27,7 +27,7 @@ function findByUlid(ulid: string): CategoryRow | undefined {
 /** GET /w/:ulid — get todos */
 export function getWebhookTodos(ulid: string): Response {
   const row = findByUlid(ulid);
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
   return new Response(row.text, {
     headers: {
@@ -46,7 +46,7 @@ export async function replaceWebhookTodos(
   ulid: string,
 ): Promise<Response> {
   const row = findByUlid(ulid);
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
   // Charge for webhook write
   const chargeError = await chargeWebhookWrite(row.user_id);
@@ -83,7 +83,7 @@ const SSE_HEARTBEAT_MS = 20_000;
 /** GET /w/:ulid/events — SSE stream */
 export function sseStream(ulid: string, signal?: AbortSignal): Response {
   const row = findByUlid(ulid);
-  if (!row) return json({ error: "not_found" }, 404);
+  if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
   let unsubscribe: (() => void) | undefined;
   let onAbort: (() => void) | undefined;

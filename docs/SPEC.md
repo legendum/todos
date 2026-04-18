@@ -264,6 +264,25 @@ All category routes support multiple response formats:
 - **Text** — `Accept: text/markdown` or `.md` extension (e.g. `GET /shopping.md`). Returns `todos.md` format.
 - **JSON** — `Accept: application/json` or `.json` extension.
 
+### Errors (JSON)
+
+**404 Not Found** responses that return JSON use this shape:
+
+```json
+{ "error": "not_found", "reason": "<string>" }
+```
+
+The `reason` field says what was missing (same `error` code, finer detail for clients and logs):
+
+| `reason` | When |
+|----------|------|
+| `category` | Unknown category **slug** on `/:category` routes (including `GET`/`PUT`/`POST`/`PATCH`/`DELETE`, and format suffixes such as `.md` / `.json`). |
+| `route` | No matching API route in **hosted** mode (unknown path after auth). |
+| `ulid` | Unknown **webhook id** on `/w/:ulid` (`GET`/`PUT`/`POST` todos, or `GET /w/:ulid/events` for SSE). |
+| `user` | User row missing (e.g. `GET /t/settings/me` — abnormal; self-hosted always has a local user). |
+
+Other status codes: **400** often uses `{ "error": "invalid_request", "message": "…" }`. **402** / **429** from billing are described in §5.
+
 ### Categories & todos (auth)
 
 - `GET /` — list all categories. Sorted by `position`.
@@ -291,7 +310,7 @@ Endpoints:
 - `PUT /w/:ulid` — replace all todos. Body: full `todos.md` content. **Costs 0.1 credits (via tab).**
 - `POST /w/:ulid` — same as PUT (replace all). **Costs 0.1 credits (via tab).**
 
-Shared responses: **404** if category not found; **402** if no Legendum account linked; **429** if charge fails.
+Shared responses: **404** if the ULID is not found (`reason: ulid` — see **Errors (JSON)** above); **402** if no Legendum account linked; **429** if charge fails.
 
 ### Server-Sent Events (SSE)
 
