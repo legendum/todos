@@ -163,9 +163,9 @@ export default function CategoriesList({ onSelect }: Props) {
 
   return (
     <div className="screen">
-      <div className="list-search-strip">
-        <label className="list-search" htmlFor="todos-category-list-filter">
-          <span className="list-search-icon" aria-hidden>
+      <div className="list-filter-strip">
+        <label className="list-filter" htmlFor="todos-category-list-filter">
+          <span className="list-filter-icon" aria-hidden>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <circle
                 cx="11"
@@ -185,8 +185,8 @@ export default function CategoriesList({ onSelect }: Props) {
           <input
             id="todos-category-list-filter"
             type="search"
-            className="list-search-input"
-            placeholder="Search lists…"
+            className="list-filter-input"
+            placeholder="Filter..."
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             autoComplete="off"
@@ -197,7 +197,7 @@ export default function CategoriesList({ onSelect }: Props) {
           {filterQuery ? (
             <button
               type="button"
-              className="list-search-clear"
+              className="list-filter-clear"
               onClick={() => setFilterQuery("")}
               aria-label="Clear search"
             >
