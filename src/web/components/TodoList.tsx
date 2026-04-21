@@ -48,6 +48,14 @@ type Line =
     }
   | { id: string; isTodo: false; text: string };
 
+/**
+ * In-memory cache of the last-seen markdown per category, keyed by slug.
+ * Used to prime `lines` synchronously when the user re-opens a category
+ * they've already visited this session, so the rows area doesn't flash
+ * blank while IndexedDB and the network fetch resolve.
+ */
+const markdownMemCache = new Map<string, string>();
+
 function parseLines(content: string): Line[] {
   if (!content) return [];
   return mergeConsecutiveFreeformLines(parseContent(content)).map((p, i) => {
@@ -91,7 +99,9 @@ type Props = {
 };
 
 export default function TodoList({ category, onBack, onRenamed }: Props) {
-  const [lines, setLines] = useState<Line[]>([]);
+  const [lines, setLines] = useState<Line[]>(() =>
+    parseLines(markdownMemCache.get(category.slug) ?? ""),
+  );
   const [newTodo, setNewTodo] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -139,10 +149,21 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     };
   }, []);
 
-  // Load markdown from network or IndexedDB cache
+  // Load markdown from IndexedDB and network in parallel. IDB usually wins,
+  // so rows appear immediately; network result then overwrites with fresher
+  // data. A module-level in-memory cache primes `lines` synchronously on
+  // revisit (see `markdownMemCache`).
   useEffect(() => {
     let cancelled = false;
+    let networkLoaded = false;
     const slug = category.slug;
+
+    void (async () => {
+      const cached = await getMarkdown(slug);
+      if (cancelled || networkLoaded || !cached) return;
+      markdownMemCache.set(slug, cached.text);
+      setLines(parseLines(cached.text));
+    })();
 
     void (async () => {
       try {
@@ -152,14 +173,12 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         const h = res.headers.get("X-Updated-At");
         const updatedAt = h ? parseInt(h, 10) : 0;
         await saveMarkdown({ slug, text, updatedAt, pending: false });
-        if (!cancelled) setLines(parseLines(text));
+        if (cancelled) return;
+        networkLoaded = true;
+        markdownMemCache.set(slug, text);
+        setLines(parseLines(text));
       } catch {
-        const cached = await getMarkdown(slug);
-        if (cached) {
-          if (!cancelled) setLines(parseLines(cached.text));
-        } else if (!cancelled) {
-          setLines([]);
-        }
+        /* cache path above handles the fallback */
       }
     })();
 
@@ -183,6 +202,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
           updatedAt: Math.max(prev?.updatedAt ?? 0, t),
           pending: false,
         });
+        markdownMemCache.set(category.slug, text);
         setLines(parseLines(text));
       })();
     });
@@ -193,7 +213,10 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     const onSync = () => {
       void (async () => {
         const row = await getMarkdown(category.slug);
-        if (row) setLines(parseLines(row.text));
+        if (row) {
+          markdownMemCache.set(category.slug, row.text);
+          setLines(parseLines(row.text));
+        }
       })();
     };
     window.addEventListener("todos-offline-sync", onSync);

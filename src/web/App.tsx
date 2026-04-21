@@ -166,8 +166,16 @@ export default function App() {
         setFilterQuery={handleSetFilterQuery}
         filterInputRef={filterInputRef}
       />
+      <div style={{ display: selectedCategory ? "none" : undefined }}>
+        <CategoriesList
+          onSelect={selectCategory}
+          filterQuery={filterQuery}
+          filterInputRef={filterInputRef}
+        />
+      </div>
       {selectedCategory ? (
         <TodoList
+          key={selectedCategory.slug}
           category={selectedCategory}
           onBack={goBack}
           onRenamed={({ name, slug }) => {
@@ -177,13 +185,7 @@ export default function App() {
             window.history.replaceState(null, "", `/${slug}`);
           }}
         />
-      ) : (
-        <CategoriesList
-          onSelect={selectCategory}
-          filterQuery={filterQuery}
-          filterInputRef={filterInputRef}
-        />
-      )}
+      ) : null}
     </>
   );
 }

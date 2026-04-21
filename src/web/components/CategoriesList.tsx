@@ -232,7 +232,7 @@ export default function CategoriesList({
 
       {categories.length === 0 && !creating && (
         <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
-          No categories yet. Tap + to create one.
+          No todo lists yet. Tap + to create one.
         </p>
       )}
 
