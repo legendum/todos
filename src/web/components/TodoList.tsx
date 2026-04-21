@@ -110,6 +110,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState(category.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const addBarRef = useRef<HTMLDivElement>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -146,6 +147,26 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  // Pin the add-todo bar to the bottom of the *visual* viewport so it floats
+  // just above the mobile keyboard instead of getting pushed off-screen.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const el = addBarRef.current;
+      if (!el) return;
+      const offset = window.innerHeight - vv.offsetTop - vv.height;
+      el.style.bottom = `${Math.max(0, offset)}px`;
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
     };
   }, []);
 
@@ -521,7 +542,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 72 }}>
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
@@ -579,7 +600,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </DndContext>
       </div>
 
-      <div className="add-todo-bar">
+      <div className="add-todo-bar" ref={addBarRef}>
         <input
           className="input"
           placeholder="Add a todo..."
