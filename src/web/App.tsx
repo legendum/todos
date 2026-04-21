@@ -31,6 +31,24 @@ function getSlugFromPath(): string | null {
   return slug || null;
 }
 
+/** Resolve a slug to a CategoryListEntry, preferring the network and falling
+ * back to the offline list cache. */
+async function resolveSlug(slug: string): Promise<CategoryListEntry | null> {
+  try {
+    const r = await fetch(`/${slug}.json`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (r.ok) {
+      const data = (await r.json()) as TodoCategoryJson;
+      if (data?.slug) return categoryFromTodoJson(data);
+    }
+  } catch {
+    /* fall through to cache */
+  }
+  return (await findCategoryInList(slug)) ?? null;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,25 +87,9 @@ export default function App() {
     if (!slug) return;
 
     let cancelled = false;
-
-    void (async () => {
-      try {
-        const r = await fetch(`/${slug}.json`, {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-        if (cancelled) return;
-        if (r.ok) {
-          const data = (await r.json()) as TodoCategoryJson;
-          if (data?.slug) setSelectedCategory(categoryFromTodoJson(data));
-          return;
-        }
-      } catch {
-        /* fall through to cache */
-      }
-      const cached = await findCategoryInList(slug);
-      if (!cancelled && cached) setSelectedCategory(cached);
-    })();
+    void resolveSlug(slug).then((cat) => {
+      if (!cancelled && cat) setSelectedCategory(cat);
+    });
 
     return () => {
       cancelled = true;
@@ -102,26 +104,7 @@ export default function App() {
         setSelectedCategory(null);
         return;
       }
-      void (async () => {
-        try {
-          const r = await fetch(`/${slug}.json`, {
-            credentials: "include",
-            headers: { Accept: "application/json" },
-          });
-          if (r.ok) {
-            const data = (await r.json()) as TodoCategoryJson;
-            if (data?.slug) {
-              setSelectedCategory(categoryFromTodoJson(data));
-              return;
-            }
-          }
-        } catch {
-          /* cache */
-        }
-        const cached = await findCategoryInList(slug);
-        if (cached) setSelectedCategory(cached);
-        else setSelectedCategory(null);
-      })();
+      void resolveSlug(slug).then((cat) => setSelectedCategory(cat));
     };
 
     window.addEventListener("popstate", onPopState);

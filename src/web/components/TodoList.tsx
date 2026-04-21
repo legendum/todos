@@ -111,6 +111,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const [editName, setEditName] = useState(category.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const addBarRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef<HTMLDivElement>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -363,6 +364,11 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         text,
       },
     ]);
+    // Scroll to the new row after React paints it.
+    requestAnimationFrame(() => {
+      const el = listScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   };
 
   const openEditDialog = (index: number) => {
@@ -542,7 +548,10 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 72 }}>
+      <div
+        ref={listScrollRef}
+        style={{ flex: 1, overflowY: "auto", paddingBottom: 72 }}
+      >
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
