@@ -83,9 +83,12 @@ export default function TopBar({
     ctrl.checkStatus();
 
     const intervalId = setInterval(() => ctrl.checkStatus(), 60_000);
+    const onRefresh = () => ctrl.checkStatus();
+    window.addEventListener("todos-credits-refresh", onRefresh);
 
     return () => {
       clearInterval(intervalId);
+      window.removeEventListener("todos-credits-refresh", onRefresh);
       ctrl.destroy();
       ctrlRef.current = null;
     };

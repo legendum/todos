@@ -85,7 +85,7 @@ Limits:
 
 A lightweight CLI that does two things: (1) syncs `todos.md` with the server, and (2) provides easy commands to edit it. Every command syncs first, then edits, then syncs again. All commands reference todos by **line number** (numbered from 1).
 
-**Command parsing**: Commands like `done`, `del`, `first`, `last` only match when followed by numeric positions. `open` only matches with no arguments. Anything else is treated as a new todo. Examples: `todos open a restaurant` adds "open a restaurant"; `todos delete the evidence` adds "delete the evidence"; `todos del 4` deletes todo at position 4.
+**Command parsing**: Commands like `done`, `del`, `first`, `last` only match when followed by numeric positions. `open`, `skill`, and `purge` only match when they are the sole argument. Anything else is treated as a new todo. Examples: `todos open a restaurant` adds "open a restaurant"; `todos delete the evidence` adds "delete the evidence"; `todos purge the database` adds "purge the database"; `todos del 4` deletes todo at position 4; `todos purge` removes every done item.
 
 1. **First run**: Prompts for webhook URL → saves it to `.env` as `TODOS_WEBHOOK`.
 2. **Subsequent runs**: Reads `TODOS_WEBHOOK` from `.env`.
@@ -96,6 +96,7 @@ A lightweight CLI that does two things: (1) syncs `todos.md` with the server, an
    - `todos del 2` / `todos delete 2` — delete todo at line 2
    - `todos first 4 6` — move todos at lines 4 and 6 to the top (lines 1 and 2, preserving order)
    - `todos last 2 5` — move todos at lines 2 and 5 to the bottom (2 before 5)
+   - `todos purge` — remove every done (`[x]`) todo; free-form text is preserved
    - `todos open` — open `todos.in/<category>` in the default browser
    - `todos Buy milk` — any text that doesn't match a command is added as a new todo at the end
 4. **Output** is the `todos.md` format, numbered:

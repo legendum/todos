@@ -120,6 +120,7 @@ export default function CategoriesList({
     setNewName("");
     setCreating(false);
     await fetchCategories();
+    window.dispatchEvent(new Event("todos-credits-refresh"));
   };
 
   const handleDelete = async (slug: string) => {

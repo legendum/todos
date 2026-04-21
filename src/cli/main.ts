@@ -138,6 +138,7 @@ Usage:
   todos del|delete <n>     delete todo at position
   todos first <n> [...]    move position(s) to the top
   todos last <n> [...]     move position(s) to the bottom
+  todos purge              remove all done items
   todos open               open this category in the browser
   todos skill              install agent skill for Claude Code / Cursor
   todos help               show this message
@@ -269,6 +270,8 @@ async function main() {
       todo: t.todo,
     }));
     lines = [...remaining, ...movedLines];
+  } else if (command === "purge" && args.length === 1) {
+    lines = lines.filter((l) => !(l.isTodo && l.todo.done));
   } else if (command === "skill" && args.length === 1) {
     installSkill();
     return;

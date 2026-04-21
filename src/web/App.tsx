@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   categoryFromTodoJson,
@@ -133,20 +132,12 @@ export default function App() {
     return <Login />;
   }
 
-  // Typing in the filter while inside a category sends the user back home
-  // so they can see the filtered list of categories.
-  const handleSetFilterQuery: Dispatch<SetStateAction<string>> = (value) => {
-    setFilterQuery(value);
-    const next = typeof value === "function" ? value(filterQuery) : value;
-    if (next.length > 0 && selectedCategory) goBack();
-  };
-
   return (
     <>
       <TopBar
         isSelfHosted={isSelfHosted}
         filterQuery={filterQuery}
-        setFilterQuery={handleSetFilterQuery}
+        setFilterQuery={setFilterQuery}
         filterInputRef={filterInputRef}
       />
       <div style={{ display: selectedCategory ? "none" : undefined }}>
@@ -161,6 +152,7 @@ export default function App() {
         <TodoList
           key={selectedCategory.slug}
           category={selectedCategory}
+          filterQuery={filterQuery}
           onBack={goBack}
           onRenamed={({ name, slug }) => {
             setSelectedCategory((prev) =>

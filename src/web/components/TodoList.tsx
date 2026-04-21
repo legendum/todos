@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParsedLine, TodoListMarker } from "../../lib/todos";
 import {
   mergeConsecutiveFreeformLines,
@@ -94,11 +94,17 @@ function serializeLines(lines: Line[]): string {
 
 type Props = {
   category: CategoryListEntry;
+  filterQuery: string;
   onBack: () => void;
   onRenamed: (updated: { name: string; slug: string }) => void;
 };
 
-export default function TodoList({ category, onBack, onRenamed }: Props) {
+export default function TodoList({
+  category,
+  filterQuery,
+  onBack,
+  onRenamed,
+}: Props) {
   const [lines, setLines] = useState<Line[]>(() =>
     parseLines(markdownMemCache.get(category.slug) ?? ""),
   );
@@ -112,6 +118,7 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const addBarRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
+  const initialScrollSlugRef = useRef<string | null>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -122,9 +129,34 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
   );
 
+  const filterTrim = filterQuery.trim().toLowerCase();
+  const filterActive = filterTrim.length > 0;
+  const visibleLines = useMemo(() => {
+    if (!filterActive) return lines.map((line, index) => ({ line, index }));
+    return lines
+      .map((line, index) => ({ line, index }))
+      .filter(
+        ({ line }) =>
+          line.isTodo && line.text.toLowerCase().includes(filterTrim),
+      );
+  }, [lines, filterActive, filterTrim]);
+
   useEffect(() => {
     if (!editingName) setEditName(category.name);
   }, [category.name, category.slug, editingName]);
+
+  // On first non-empty render of a newly-opened category, jump to the bottom
+  // so the freshest todos are in view. Guarded by slug so edits within the
+  // same list don't re-snap and lose the user's scroll position.
+  useEffect(() => {
+    if (initialScrollSlugRef.current === category.slug) return;
+    if (lines.length === 0) return;
+    initialScrollSlugRef.current = category.slug;
+    requestAnimationFrame(() => {
+      const el = listScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, [category.slug, lines.length]);
 
   // Update page title with category name and counts
   useEffect(() => {
@@ -550,77 +582,103 @@ export default function TodoList({ category, onBack, onRenamed }: Props) {
 
       <div
         ref={listScrollRef}
-        style={{ flex: 1, overflowY: "auto", paddingBottom: 72 }}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          paddingBottom: filterActive ? 0 : 72,
+        }}
       >
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={lines.map((l) => l.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {lines.map((line, index) =>
+        {filterActive ? (
+          visibleLines.length > 0 ? (
+            visibleLines.map(({ line, index }) =>
               line.isTodo ? (
-                <TodoSortableRow
+                <StaticTodoRow
                   key={line.id}
                   line={line}
                   onToggle={() => toggleDone(index)}
                   onDelete={() => deleteLine(index)}
                   onEdit={() => openEditDialog(index)}
                 />
-              ) : (
-                <MarkdownSortableRow key={line.id} line={line} />
-              ),
-            )}
-          </SortableContext>
-
-          <DragOverlay>
-            {draggedLine ? (
-              <div className="drag-overlay">
-                {draggedLine.isTodo ? (
-                  <div className="todo-row">
-                    <DragHandle />
-                    <button
-                      className={`todo-checkbox${draggedLine.done ? " checked" : ""}`}
-                      type="button"
-                    >
-                      {draggedLine.done && <CheckIcon />}
-                    </button>
-                    <span
-                      className={`todo-text${draggedLine.done ? " done" : ""}`}
-                    >
-                      <TodoMarkdownText text={draggedLine.text} />
-                    </span>
-                  </div>
+              ) : null,
+            )
+          ) : (
+            <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
+              No matches.
+            </p>
+          )
+        ) : (
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={lines.map((l) => l.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {lines.map((line, index) =>
+                line.isTodo ? (
+                  <TodoSortableRow
+                    key={line.id}
+                    line={line}
+                    onToggle={() => toggleDone(index)}
+                    onDelete={() => deleteLine(index)}
+                    onEdit={() => openEditDialog(index)}
+                  />
                 ) : (
-                  <div
-                    className="md-sortable-inner"
-                    style={{ maxWidth: "100%" }}
-                  >
-                    <DragHandle />
-                    <MarkdownBlock text={draggedLine.text} />
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+                  <MarkdownSortableRow key={line.id} line={line} />
+                ),
+              )}
+            </SortableContext>
+
+            <DragOverlay>
+              {draggedLine ? (
+                <div className="drag-overlay">
+                  {draggedLine.isTodo ? (
+                    <div className="todo-row">
+                      <DragHandle />
+                      <button
+                        className={`todo-checkbox${draggedLine.done ? " checked" : ""}`}
+                        type="button"
+                      >
+                        {draggedLine.done && <CheckIcon />}
+                      </button>
+                      <span
+                        className={`todo-text${draggedLine.done ? " done" : ""}`}
+                      >
+                        <TodoMarkdownText text={draggedLine.text} />
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      className="md-sortable-inner"
+                      style={{ maxWidth: "100%" }}
+                    >
+                      <DragHandle />
+                      <MarkdownBlock text={draggedLine.text} />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
       </div>
 
-      <div className="add-todo-bar" ref={addBarRef}>
-        <input
-          className="input"
-          placeholder="Add a todo..."
-          value={newTodo}
-          onChange={(e) => setNewTodo(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addTodo()}
-        />
-        <button className="btn" onClick={addTodo} disabled={!newTodo.trim()}>
-          Add
-        </button>
-      </div>
+      {!filterActive && (
+        <div className="add-todo-bar" ref={addBarRef}>
+          <input
+            className="input"
+            placeholder="Add a todo..."
+            value={newTodo}
+            onChange={(e) => setNewTodo(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addTodo()}
+          />
+          <button className="btn" onClick={addTodo} disabled={!newTodo.trim()}>
+            Add
+          </button>
+        </div>
+      )}
 
       {editingIndex !== null && (
         <EditTextDialog
@@ -743,6 +801,78 @@ function TodoSortableRow({
             Delete
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Non-draggable todo row used while a filter is active — reordering a filtered
+ * subset would silently rearrange hidden neighbours, so drag is disabled. */
+function StaticTodoRow({
+  line,
+  onToggle,
+  onDelete,
+  onEdit,
+}: {
+  line: Extract<Line, { isTodo: true }>;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+    actionCount: 2,
+  });
+
+  const indentPad = (line.indent || "").length * 20;
+
+  return (
+    <div className="row-wrap" style={{ borderBottom: "none" }}>
+      <div className="row-slider" style={sliderStyle} {...slideHandlers}>
+        <div className="row-main">
+          <div
+            className="todo-row"
+            style={
+              indentPad ? { paddingLeft: `${16 + indentPad}px` } : undefined
+            }
+          >
+            <div className="drag-handle drag-handle--static" aria-hidden>
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="5" cy="3" r="1.5" />
+                <circle cx="11" cy="3" r="1.5" />
+                <circle cx="5" cy="8" r="1.5" />
+                <circle cx="11" cy="8" r="1.5" />
+                <circle cx="5" cy="13" r="1.5" />
+                <circle cx="11" cy="13" r="1.5" />
+              </svg>
+            </div>
+            <button
+              type="button"
+              className={`todo-checkbox${line.done ? " checked" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+            >
+              {line.done && <CheckIcon />}
+            </button>
+            <span className={`todo-text${line.done ? " done" : ""}`}>
+              <TodoMarkdownText text={line.text} />
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="row-edit"
+          onClick={() => {
+            reset();
+            onEdit();
+          }}
+        >
+          Edit
+        </button>
+        <button type="button" className="row-delete" onClick={onDelete}>
+          Delete
+        </button>
       </div>
     </div>
   );
