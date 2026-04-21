@@ -1,5 +1,6 @@
 :root {
-  --topbar-height: 56px;
+  /* Matches topbar vertical padding (10+10) + filter min-height (40) + border (1) = 61px, rounded up for breathing room. */
+  --topbar-height: 64px;
 }
 * {
   box-sizing: border-box;

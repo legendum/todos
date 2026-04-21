@@ -10,8 +10,8 @@ export type SwipeToRevealResult = {
   slideHandlers: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
-    onPointerUp: () => void;
-    onPointerCancel: () => void;
+    onPointerUp: (e: React.PointerEvent) => void;
+    onPointerCancel: (e: React.PointerEvent) => void;
   };
 };
 
@@ -41,24 +41,31 @@ export function useSwipeToReveal(
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
 
-  const onPointerUp = useCallback(() => {
-    if (dragStart.current == null) return;
-    const wasRevealed = dragStart.current.offset <= -snapThreshold;
-    const snapOpen = offset < -snapThreshold;
-    if (mode.current === "pending") {
-      if (wasRevealed) {
-        setOffset(0);
-      } else {
-        onTap?.();
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (dragStart.current == null) return;
+      const wasRevealed = dragStart.current.offset <= -snapThreshold;
+      const snapOpen = offset < -snapThreshold;
+      if (mode.current === "pending") {
+        if (wasRevealed) {
+          setOffset(0);
+        } else {
+          // Prevent the compat `click` that follows a touch pointerup so
+          // it can't land on DOM that appeared under the finger when
+          // onTap navigated.
+          e.preventDefault();
+          onTap?.();
+        }
+      } else if (mode.current === "horizontal") {
+        setOffset(snapOpen ? -actionsWidth : 0);
       }
-    } else if (mode.current === "horizontal") {
-      setOffset(snapOpen ? -actionsWidth : 0);
-    }
-    // vertical → user was scrolling; do nothing.
-    dragStart.current = null;
-    mode.current = "pending";
-    setDragging(false);
-  }, [offset, onTap, actionsWidth, snapThreshold]);
+      // vertical → user was scrolling; do nothing.
+      dragStart.current = null;
+      mode.current = "pending";
+      setDragging(false);
+    },
+    [offset, onTap, actionsWidth, snapThreshold],
+  );
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     mode.current = "pending";
@@ -88,7 +95,7 @@ export function useSwipeToReveal(
     (e: React.PointerEvent) => {
       if (dragStart.current == null) return;
       if (e.pointerType === "mouse" && e.buttons !== 1) {
-        onPointerUp();
+        onPointerUp(e);
         return;
       }
       const dx = e.clientX - dragStart.current.x;
