@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   categoryFromTodoJson,
@@ -149,34 +150,40 @@ export default function App() {
     return <Login />;
   }
 
-  if (selectedCategory) {
-    return (
-      <TodoList
-        category={selectedCategory}
-        onBack={goBack}
-        onRenamed={({ name, slug }) => {
-          setSelectedCategory((prev) =>
-            prev ? { ...prev, name, slug } : null,
-          );
-          window.history.replaceState(null, "", `/${slug}`);
-        }}
-      />
-    );
-  }
+  // Typing in the filter while inside a category sends the user back home
+  // so they can see the filtered list of categories.
+  const handleSetFilterQuery: Dispatch<SetStateAction<string>> = (value) => {
+    setFilterQuery(value);
+    const next = typeof value === "function" ? value(filterQuery) : value;
+    if (next.length > 0 && selectedCategory) goBack();
+  };
 
   return (
     <>
       <TopBar
         isSelfHosted={isSelfHosted}
         filterQuery={filterQuery}
-        setFilterQuery={setFilterQuery}
+        setFilterQuery={handleSetFilterQuery}
         filterInputRef={filterInputRef}
       />
-      <CategoriesList
-        onSelect={selectCategory}
-        filterQuery={filterQuery}
-        filterInputRef={filterInputRef}
-      />
+      {selectedCategory ? (
+        <TodoList
+          category={selectedCategory}
+          onBack={goBack}
+          onRenamed={({ name, slug }) => {
+            setSelectedCategory((prev) =>
+              prev ? { ...prev, name, slug } : null,
+            );
+            window.history.replaceState(null, "", `/${slug}`);
+          }}
+        />
+      ) : (
+        <CategoriesList
+          onSelect={selectCategory}
+          filterQuery={filterQuery}
+          filterInputRef={filterInputRef}
+        />
+      )}
     </>
   );
 }

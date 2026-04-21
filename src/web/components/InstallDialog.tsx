@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import CopyIcon from "./CopyIcon";
 
 const INSTALL_CMD = "curl -fsSL https://todos.in/install.sh | sh";
@@ -37,7 +38,7 @@ export default function InstallDialog({ onClose }: Props) {
     }
   }
 
-  return (
+  const overlay = (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
@@ -107,4 +108,8 @@ todos open         # open in the browser`}
       </div>
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(overlay, document.body)
+    : null;
 }
