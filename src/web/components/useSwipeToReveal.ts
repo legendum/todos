@@ -7,6 +7,9 @@ const DIRECTION_THRESHOLD = 6;
 export type SwipeToRevealResult = {
   sliderStyle: React.CSSProperties;
   reset: () => void;
+  /** Call from the row's native `onClick`. Runs `onSelect` only when the
+   * gesture was a real tap (not a swipe) and the row isn't already open. */
+  handleClick: (onSelect: () => void) => void;
   slideHandlers: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
@@ -18,20 +21,15 @@ export type SwipeToRevealResult = {
 type GestureMode = "pending" | "horizontal" | "vertical";
 
 export function useSwipeToReveal(
-  options: { onTap?: () => void; actionCount?: number } = {},
+  options: { actionCount?: number } = {},
 ): SwipeToRevealResult {
-  const { onTap, actionCount = 1 } = options;
+  const { actionCount = 1 } = options;
   const actionsWidth = BUTTON_WIDTH * actionCount;
   const snapThreshold = actionsWidth / 2;
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
-  /**
-   * Gesture classification: on pointerdown we stay "pending" so we don't
-   * capture the pointer or preventDefault. Once we see enough movement, we
-   * commit to "horizontal" (swipe to reveal) or "vertical" (let the browser
-   * scroll the list — no tap, no capture).
-   */
   const mode = useRef<GestureMode>("pending");
+  const swiped = useRef(false);
   const dragStart = useRef<{
     x: number;
     y: number;
@@ -41,34 +39,21 @@ export function useSwipeToReveal(
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
 
-  const onPointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (dragStart.current == null) return;
-      const wasRevealed = dragStart.current.offset <= -snapThreshold;
-      const snapOpen = offset < -snapThreshold;
-      if (mode.current === "pending") {
-        if (wasRevealed) {
-          setOffset(0);
-        } else {
-          // Prevent the compat `click` that follows a touch pointerup so
-          // it can't land on DOM that appeared under the finger when
-          // onTap navigated.
-          e.preventDefault();
-          onTap?.();
-        }
-      } else if (mode.current === "horizontal") {
-        setOffset(snapOpen ? -actionsWidth : 0);
-      }
-      // vertical → user was scrolling; do nothing.
-      dragStart.current = null;
-      mode.current = "pending";
-      setDragging(false);
-    },
-    [offset, onTap, actionsWidth, snapThreshold],
-  );
+  const onPointerUp = useCallback(() => {
+    if (dragStart.current == null) return;
+    const snapOpen = offsetRef.current < -snapThreshold;
+    if (mode.current === "horizontal") {
+      setOffset(snapOpen ? -actionsWidth : 0);
+      swiped.current = true;
+    }
+    dragStart.current = null;
+    mode.current = "pending";
+    setDragging(false);
+  }, [actionsWidth, snapThreshold]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     mode.current = "pending";
+    swiped.current = false;
     const target = e.target as HTMLElement;
     if (
       target.closest?.("button.row-delete") ||
@@ -77,10 +62,7 @@ export function useSwipeToReveal(
       return;
     if (target.closest?.(".drag-handle")) return;
     if (target.closest?.(".todo-checkbox")) return;
-    // Let inline links navigate; pointer capture + preventDefault would block clicks.
     if (target.closest?.("a.text-inline-link")) return;
-    // Do NOT capture the pointer here — capture suppresses native vertical
-    // scroll on touch. We capture later, only if the gesture is horizontal.
     if (e.pointerType === "mouse") e.preventDefault();
     dragStart.current = {
       x: e.clientX,
@@ -95,7 +77,7 @@ export function useSwipeToReveal(
     (e: React.PointerEvent) => {
       if (dragStart.current == null) return;
       if (e.pointerType === "mouse" && e.buttons !== 1) {
-        onPointerUp(e);
+        onPointerUp();
         return;
       }
       const dx = e.clientX - dragStart.current.x;
@@ -106,15 +88,12 @@ export function useSwipeToReveal(
         const ay = Math.abs(dy);
         if (ax < DIRECTION_THRESHOLD && ay < DIRECTION_THRESHOLD) return;
         if (ay > ax) {
-          // Vertical scroll — bail out, let the browser handle it.
           mode.current = "vertical";
           dragStart.current = null;
           setDragging(false);
           return;
         }
         mode.current = "horizontal";
-        // Now that we know it's a swipe, capture so we keep receiving events
-        // even if the finger leaves the row.
         try {
           (e.currentTarget as HTMLElement).setPointerCapture(
             dragStart.current.pointerId,
@@ -139,9 +118,28 @@ export function useSwipeToReveal(
 
   const reset = useCallback(() => setOffset(0), []);
 
+  const handleClick = useCallback(
+    (onSelect: () => void) => {
+      // Browser fired a compat click after our pointer sequence.
+      // Skip if it was actually a swipe, or if the row is revealed
+      // (then close instead of opening).
+      if (swiped.current) {
+        swiped.current = false;
+        return;
+      }
+      if (offsetRef.current !== 0) {
+        setOffset(0);
+        return;
+      }
+      onSelect();
+    },
+    [],
+  );
+
   return {
     sliderStyle,
     reset,
+    handleClick,
     slideHandlers: {
       onPointerDown,
       onPointerMove,

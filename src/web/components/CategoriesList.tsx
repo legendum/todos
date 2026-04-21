@@ -321,9 +321,8 @@ function SortableCategoryRow({
     isDragging,
   } = useSortable({ id: category.slug });
 
-  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+  const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
     actionCount: 2,
-    onTap: onSelect,
   });
 
   const style: React.CSSProperties = {
@@ -335,7 +334,7 @@ function SortableCategoryRow({
   return (
     <li className="row-wrap" ref={setNodeRef} style={style} {...attributes}>
       <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-        <div className="row-main">
+        <div className="row-main" onClick={() => handleClick(onSelect)}>
           <div className="list-item" style={{ borderBottom: "none" }}>
             <DragHandle listeners={listeners} />
             <div className="list-item-content" style={{ marginLeft: 8 }}>
@@ -376,15 +375,14 @@ function StaticCategoryRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
+  const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
     actionCount: 2,
-    onTap: onSelect,
   });
 
   return (
     <li className="row-wrap">
       <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-        <div className="row-main">
+        <div className="row-main" onClick={() => handleClick(onSelect)}>
           <div className="list-item" style={{ borderBottom: "none" }}>
             <div className="drag-handle drag-handle--static" aria-hidden>
               <svg viewBox="0 0 16 16" fill="currentColor">

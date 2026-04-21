@@ -33,9 +33,29 @@ export default function TopBar({
     error: null,
   });
   const ctrlRef = useRef<any>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
   const [showInstall, setShowInstall] = useState(false);
 
   const wasLinkedRef = useRef(false);
+
+  // Keep the fixed topbar pinned to the top of the VISUAL viewport on iOS
+  // so opening the mobile keyboard (and any resulting page scroll) can't
+  // hide the header/filter row.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const el = headerRef.current;
+      if (el) el.style.transform = `translateY(${vv.offsetTop}px)`;
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   const legendumLinked = linkState.status === "linked";
   const lowCredits =
@@ -72,7 +92,7 @@ export default function TopBar({
   }, [isSelfHosted]);
 
   return (
-    <header className="topbar">
+    <header className="topbar" ref={headerRef}>
       <div className="topbar-left">
         <button
           type="button"
