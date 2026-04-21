@@ -3,6 +3,7 @@ import {
   countTodos,
   mergeConsecutiveFreeformLines,
   parseContent,
+  purgeDoneTodos,
   serializeContent,
   toSlug,
   validateCategoryName,
@@ -67,6 +68,42 @@ describe("mergeConsecutiveFreeformLines", () => {
     expect(merged[0]).toEqual({ isTodo: false, raw: "Note A" });
     expect(merged[1].isTodo).toBe(true);
     expect(merged[2]).toEqual({ isTodo: false, raw: "Note B" });
+  });
+});
+
+describe("purgeDoneTodos", () => {
+  test("drops done todos, keeps undone and free-form", () => {
+    const input = `## Sprint
+Context line
+
+[ ] Buy milk
+[x] Fix bug
+[ ] Deploy
+[x] Old task`;
+    const out = serializeContent(purgeDoneTodos(parseContent(input)));
+    expect(out).toBe(`## Sprint
+Context line
+
+[ ] Buy milk
+[ ] Deploy
+`);
+  });
+
+  test("no-op when nothing is done", () => {
+    const input = "[ ] a\n[ ] b";
+    expect(serializeContent(purgeDoneTodos(parseContent(input)))).toBe(
+      `${input}\n`,
+    );
+  });
+
+  test("removes all lines when every todo is done and no free-form", () => {
+    expect(purgeDoneTodos(parseContent("[x] a\n[x] b"))).toEqual([]);
+  });
+
+  test("preserves list markers on undone todos", () => {
+    const input = "- [ ] keep\n- [x] drop\n1. [x] drop too\n2. [ ] keep two";
+    const out = serializeContent(purgeDoneTodos(parseContent(input)));
+    expect(out).toBe("- [ ] keep\n2. [ ] keep two\n");
   });
 });
 

@@ -1,6 +1,11 @@
 /** Line must stay in sync with `parseContent` todo detection. */
 const TODO_LINE_RE = /^(\s*)(?:(-|\*|\+|\d+\.)\s)?\[([ xX])\]\s*(.*)$/;
 
+/** Drop every done (`[x]`) todo line; free-form text lines are preserved. */
+export function purgeDoneTodos(lines: ParsedLine[]): ParsedLine[] {
+  return lines.filter((l) => !(l.isTodo && l.todo.done));
+}
+
 /** Count todo lines in a todos.md document. */
 export function countTodos(text: string): { total: number; done: number } {
   let total = 0;

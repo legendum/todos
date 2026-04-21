@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ParsedLine, TodoLine } from "../lib/todos";
-import { parseContent, serializeContent } from "../lib/todos";
+import { parseContent, purgeDoneTodos, serializeContent } from "../lib/todos";
 
 const TODOS_FILE = "todos.md";
 
@@ -271,7 +271,7 @@ async function main() {
     }));
     lines = [...remaining, ...movedLines];
   } else if (command === "purge" && args.length === 1) {
-    lines = lines.filter((l) => !(l.isTodo && l.todo.done));
+    lines = purgeDoneTodos(lines);
   } else if (command === "skill" && args.length === 1) {
     installSkill();
     return;
