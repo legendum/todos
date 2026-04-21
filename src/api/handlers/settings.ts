@@ -1,4 +1,5 @@
 import { getDb } from "../../lib/db.js";
+import { isSelfHosted } from "../../lib/mode.js";
 import { json } from "../json.js";
 
 export function getMe(userId: number): Response {
@@ -15,5 +16,6 @@ export function getMe(userId: number): Response {
 
   return json({
     legendum_linked: !!row.legendum_token,
+    hosted: !isSelfHosted(),
   });
 }

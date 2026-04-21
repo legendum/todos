@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   categoryFromTodoJson,
   type TodoCategoryJson,
@@ -12,6 +12,7 @@ import { type CategoryListEntry, findCategoryInList } from "./offlineDb";
 
 type User = {
   legendum_linked: boolean;
+  hosted: boolean;
 };
 
 /** Extract slug from the current URL path. Returns null if at root. */
@@ -34,7 +35,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryListEntry | null>(null);
-  const isSelfHosted = user ? !user.legendum_linked : false;
+  const [filterQuery, setFilterQuery] = useState("");
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const isSelfHosted = user ? !user.hosted : false;
 
   const fetchUser = useCallback(async () => {
     try {
@@ -163,8 +166,17 @@ export default function App() {
 
   return (
     <>
-      <TopBar isSelfHosted={isSelfHosted} />
-      <CategoriesList onSelect={selectCategory} />
+      <TopBar
+        isSelfHosted={isSelfHosted}
+        filterQuery={filterQuery}
+        setFilterQuery={setFilterQuery}
+        filterInputRef={filterInputRef}
+      />
+      <CategoriesList
+        onSelect={selectCategory}
+        filterQuery={filterQuery}
+        filterInputRef={filterInputRef}
+      />
     </>
   );
 }

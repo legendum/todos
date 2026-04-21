@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 
 const BUTTON_WIDTH = 72;
+/** Pointer must move this far before we commit to a gesture direction. */
+const DIRECTION_THRESHOLD = 6;
 
 export type SwipeToRevealResult = {
   sliderStyle: React.CSSProperties;
@@ -13,6 +15,8 @@ export type SwipeToRevealResult = {
   };
 };
 
+type GestureMode = "pending" | "horizontal" | "vertical";
+
 export function useSwipeToReveal(
   options: { onTap?: () => void; actionCount?: number } = {},
 ): SwipeToRevealResult {
@@ -21,8 +25,19 @@ export function useSwipeToReveal(
   const snapThreshold = actionsWidth / 2;
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const dragStart = useRef<{ x: number; offset: number } | null>(null);
-  const movedEnough = useRef(false);
+  /**
+   * Gesture classification: on pointerdown we stay "pending" so we don't
+   * capture the pointer or preventDefault. Once we see enough movement, we
+   * commit to "horizontal" (swipe to reveal) or "vertical" (let the browser
+   * scroll the list — no tap, no capture).
+   */
+  const mode = useRef<GestureMode>("pending");
+  const dragStart = useRef<{
+    x: number;
+    y: number;
+    offset: number;
+    pointerId: number;
+  } | null>(null);
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
 
@@ -30,21 +45,23 @@ export function useSwipeToReveal(
     if (dragStart.current == null) return;
     const wasRevealed = dragStart.current.offset <= -snapThreshold;
     const snapOpen = offset < -snapThreshold;
-    if (!movedEnough.current) {
+    if (mode.current === "pending") {
       if (wasRevealed) {
         setOffset(0);
       } else {
         onTap?.();
       }
-    } else {
+    } else if (mode.current === "horizontal") {
       setOffset(snapOpen ? -actionsWidth : 0);
     }
+    // vertical → user was scrolling; do nothing.
     dragStart.current = null;
+    mode.current = "pending";
     setDragging(false);
   }, [offset, onTap, actionsWidth, snapThreshold]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    movedEnough.current = false;
+    mode.current = "pending";
     const target = e.target as HTMLElement;
     if (
       target.closest?.("button.row-delete") ||
@@ -55,9 +72,15 @@ export function useSwipeToReveal(
     if (target.closest?.(".todo-checkbox")) return;
     // Let inline links navigate; pointer capture + preventDefault would block clicks.
     if (target.closest?.("a.text-inline-link")) return;
+    // Do NOT capture the pointer here — capture suppresses native vertical
+    // scroll on touch. We capture later, only if the gesture is horizontal.
     if (e.pointerType === "mouse") e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragStart.current = { x: e.clientX, offset: offsetRef.current };
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      offset: offsetRef.current,
+      pointerId: e.pointerId,
+    };
     setDragging(true);
   }, []);
 
@@ -69,7 +92,30 @@ export function useSwipeToReveal(
         return;
       }
       const dx = e.clientX - dragStart.current.x;
-      if (Math.abs(dx) > 5) movedEnough.current = true;
+      const dy = e.clientY - dragStart.current.y;
+
+      if (mode.current === "pending") {
+        const ax = Math.abs(dx);
+        const ay = Math.abs(dy);
+        if (ax < DIRECTION_THRESHOLD && ay < DIRECTION_THRESHOLD) return;
+        if (ay > ax) {
+          // Vertical scroll — bail out, let the browser handle it.
+          mode.current = "vertical";
+          dragStart.current = null;
+          setDragging(false);
+          return;
+        }
+        mode.current = "horizontal";
+        // Now that we know it's a swipe, capture so we keep receiving events
+        // even if the finger leaves the row.
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(
+            dragStart.current.pointerId,
+          );
+        } catch {}
+      }
+
+      if (mode.current !== "horizontal") return;
       const next = Math.max(
         -actionsWidth,
         Math.min(0, dragStart.current.offset + dx),

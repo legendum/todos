@@ -15,7 +15,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type CategoryListEntry,
   getCategoriesList,
@@ -28,9 +29,15 @@ import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
   onSelect: (cat: CategoryListEntry) => void;
+  filterQuery: string;
+  filterInputRef: RefObject<HTMLInputElement | null>;
 };
 
-export default function CategoriesList({ onSelect }: Props) {
+export default function CategoriesList({
+  onSelect,
+  filterQuery,
+  filterInputRef,
+}: Props) {
   const [categories, setCategories] = useState<CategoryListEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -39,8 +46,6 @@ export default function CategoriesList({ onSelect }: Props) {
   const [renameCategory, setRenameCategory] =
     useState<CategoryListEntry | null>(null);
   const [renameText, setRenameText] = useState("");
-  const [filterQuery, setFilterQuery] = useState("");
-  const filterInputRef = useRef<HTMLInputElement>(null);
 
   const filterTrim = filterQuery.trim().toLowerCase();
   const filteredCategories = useMemo(() => {
@@ -172,51 +177,6 @@ export default function CategoriesList({ onSelect }: Props) {
 
   return (
     <div className="screen">
-      <div className="list-filter-strip">
-        <label className="list-filter" htmlFor="todos-category-list-filter">
-          <span className="list-filter-icon" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <circle
-                cx="11"
-                cy="11"
-                r="7"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M20 20l-3-3"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <input
-            ref={filterInputRef}
-            id="todos-category-list-filter"
-            type="search"
-            className="list-filter-input"
-            placeholder="Filter..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="Filter lists by name or slug"
-            enterKeyHint="search"
-          />
-          {filterQuery ? (
-            <button
-              type="button"
-              className="list-filter-clear"
-              onClick={() => setFilterQuery("")}
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          ) : null}
-        </label>
-      </div>
-
       {filterActive ? (
         <ul className="list">
           {filteredCategories.map((cat) => (
