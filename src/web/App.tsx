@@ -171,6 +171,7 @@ export default function App() {
           onSelect={selectCategory}
           filterQuery={filterQuery}
           filterInputRef={filterInputRef}
+          visible={selectedCategory === null}
         />
       </div>
       {selectedCategory ? (

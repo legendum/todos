@@ -31,12 +31,14 @@ type Props = {
   onSelect: (cat: CategoryListEntry) => void;
   filterQuery: string;
   filterInputRef: RefObject<HTMLInputElement | null>;
+  visible: boolean;
 };
 
 export default function CategoriesList({
   onSelect,
   filterQuery,
   filterInputRef,
+  visible,
 }: Props) {
   const [categories, setCategories] = useState<CategoryListEntry[]>([]);
   const [creating, setCreating] = useState(false);
@@ -82,8 +84,8 @@ export default function CategoriesList({
   }, []);
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    if (visible) fetchCategories();
+  }, [visible, fetchCategories]);
 
   /** Home list only: move focus to filter so typing narrows the list immediately. */
   useEffect(() => {
