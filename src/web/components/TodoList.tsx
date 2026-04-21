@@ -663,6 +663,12 @@ export default function TodoList({
             </DragOverlay>
           </DndContext>
         )}
+
+        {!filterActive && lines.length === 0 && (
+          <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
+            No todo items yet. Tap Add to create one.
+          </p>
+        )}
       </div>
 
       {!filterActive && (
