@@ -118,23 +118,20 @@ export function useSwipeToReveal(
 
   const reset = useCallback(() => setOffset(0), []);
 
-  const handleClick = useCallback(
-    (onSelect: () => void) => {
-      // Browser fired a compat click after our pointer sequence.
-      // Skip if it was actually a swipe, or if the row is revealed
-      // (then close instead of opening).
-      if (swiped.current) {
-        swiped.current = false;
-        return;
-      }
-      if (offsetRef.current !== 0) {
-        setOffset(0);
-        return;
-      }
-      onSelect();
-    },
-    [],
-  );
+  const handleClick = useCallback((onSelect: () => void) => {
+    // Browser fired a compat click after our pointer sequence.
+    // Skip if it was actually a swipe, or if the row is revealed
+    // (then close instead of opening).
+    if (swiped.current) {
+      swiped.current = false;
+      return;
+    }
+    if (offsetRef.current !== 0) {
+      setOffset(0);
+      return;
+    }
+    onSelect();
+  }, []);
 
   return {
     sliderStyle,
