@@ -92,7 +92,8 @@ todos undo 1       # mark #1 as not done
 todos del 1        # delete #1
 todos first 3      # move #3 to the top
 todos last 2       # move #2 to the bottom
-todos open         # open in the browser`}
+todos open         # open in the browser
+todos purge        # remove all done items`}
             </pre>
           </section>
 
