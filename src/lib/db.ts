@@ -16,27 +16,9 @@ export function getDb(): Database {
     db = new Database(path, { create: true });
     db.run("PRAGMA journal_mode = WAL");
     db.run("PRAGMA foreign_keys = ON");
-    applyMigrations();
     runSchema();
   }
   return db;
-}
-
-function applyMigrations(): void {
-  const listsExists = db!
-    .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lists'")
-    .get();
-  if (listsExists) return;
-
-  try {
-    const sql = readFileSync(
-      join(ROOT_DIR, "config/migrate-categories-to-lists.sql"),
-      "utf-8",
-    );
-    db!.transaction(() => db!.exec(sql))();
-  } catch {
-    // Fresh install: no legacy table to rename; schema.sql will create lists
-  }
 }
 
 function runSchema(): void {
