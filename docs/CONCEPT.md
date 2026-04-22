@@ -10,11 +10,11 @@ with Legendum for billing.
 
 It'll support a free quota per week just like ../alert repo too.
 
-Just like ../alert repo, we will have categories.
+Just like ../alert repo, we will have lists.
 
-Each category will have its own list of todos.
+Each list will have its own set of todos.
 
-We will provide a super clean API too, and each category will have its own webhook, just like ../alert, except the webhook will allow:
+We will provide a super clean API too, and each list will have its own webhook, just like ../alert, except the webhook will allow:
 - list todos (GET)
 - add a todo (POST)
 - update a todo (PUT)

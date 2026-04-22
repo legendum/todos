@@ -17,48 +17,43 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  type CategoryListEntry,
-  getCategoriesList,
-  saveCategoriesList,
-} from "../offlineDb";
-import { patchCategoryName } from "../patchCategoryName";
+import { getLists, type ListEntry, saveLists } from "../offlineDb";
+import { patchListName } from "../patchListName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
-  onSelect: (cat: CategoryListEntry) => void;
+  onSelect: (entry: ListEntry) => void;
   filterQuery: string;
   filterInputRef: RefObject<HTMLInputElement | null>;
   visible: boolean;
 };
 
-export default function CategoriesList({
+export default function Lists({
   onSelect,
   filterQuery,
   filterInputRef,
   visible,
 }: Props) {
-  const [categories, setCategories] = useState<CategoryListEntry[]>([]);
+  const [lists, setLists] = useState<ListEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [renameCategory, setRenameCategory] =
-    useState<CategoryListEntry | null>(null);
+  const [renameList, setRenameList] = useState<ListEntry | null>(null);
   const [renameText, setRenameText] = useState("");
 
   const filterTrim = filterQuery.trim().toLowerCase();
-  const filteredCategories = useMemo(() => {
-    if (!filterTrim) return categories;
-    return categories.filter(
+  const filteredLists = useMemo(() => {
+    if (!filterTrim) return lists;
+    return lists.filter(
       (c) =>
         c.name.toLowerCase().includes(filterTrim) ||
         c.slug.toLowerCase().includes(filterTrim) ||
         c.ulid.toLowerCase().includes(filterTrim),
     );
-  }, [categories, filterTrim]);
+  }, [lists, filterTrim]);
 
   const filterActive = filterTrim.length > 0;
 
@@ -67,25 +62,25 @@ export default function CategoriesList({
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const fetchCategories = useCallback(async () => {
+  const fetchLists = useCallback(async () => {
     try {
       const res = await fetch("/", {
         credentials: "include",
         headers: { Accept: "application/json" },
       });
       if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as { categories: CategoryListEntry[] };
-      setCategories(data.categories);
-      await saveCategoriesList(data.categories);
+      const data = (await res.json()) as { lists: ListEntry[] };
+      setLists(data.lists);
+      await saveLists(data.lists);
     } catch {
-      const cached = await getCategoriesList();
-      if (cached) setCategories(cached);
+      const cached = await getLists();
+      if (cached) setLists(cached);
     }
   }, []);
 
   useEffect(() => {
-    if (visible) fetchCategories();
-  }, [visible, fetchCategories]);
+    if (visible) fetchLists();
+  }, [visible, fetchLists]);
 
   /** Home list only: move focus to filter so typing narrows the list immediately. */
   useEffect(() => {
@@ -97,11 +92,11 @@ export default function CategoriesList({
 
   useEffect(() => {
     const onSync = () => {
-      void fetchCategories();
+      void fetchLists();
     };
     window.addEventListener("todos-offline-sync", onSync);
     return () => window.removeEventListener("todos-offline-sync", onSync);
-  }, [fetchCategories]);
+  }, [fetchLists]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -114,36 +109,36 @@ export default function CategoriesList({
     });
     if (!res.ok) {
       const data = (await res.json()) as { message?: string };
-      setError(data.message || "Failed to create category");
+      setError(data.message || "Failed to create list");
       return;
     }
     setNewName("");
     setCreating(false);
-    await fetchCategories();
+    await fetchLists();
     window.dispatchEvent(new Event("todos-credits-refresh"));
   };
 
   const handleDelete = async (slug: string) => {
     await fetch(`/${slug}`, { method: "DELETE", credentials: "include" });
-    await fetchCategories();
+    await fetchLists();
   };
 
-  const openRename = (cat: CategoryListEntry) => {
-    setRenameCategory(cat);
-    setRenameText(cat.name);
+  const openRename = (entry: ListEntry) => {
+    setRenameList(entry);
+    setRenameText(entry.name);
   };
 
   const saveRename = async () => {
-    if (!renameCategory) return;
+    if (!renameList) return;
     const trimmed = renameText.trim();
-    if (!trimmed || trimmed === renameCategory.name) {
-      setRenameCategory(null);
+    if (!trimmed || trimmed === renameList.name) {
+      setRenameList(null);
       return;
     }
-    const data = await patchCategoryName(renameCategory.slug, trimmed);
+    const data = await patchListName(renameList.slug, trimmed);
     if (data) {
-      setRenameCategory(null);
-      await fetchCategories();
+      setRenameList(null);
+      await fetchLists();
     }
   };
 
@@ -159,12 +154,12 @@ export default function CategoriesList({
     const overId = String(over.id);
     if (activeId === overId) return;
 
-    const oldIndex = categories.findIndex((c) => c.slug === activeId);
-    const newIndex = categories.findIndex((c) => c.slug === overId);
+    const oldIndex = lists.findIndex((c) => c.slug === activeId);
+    const newIndex = lists.findIndex((c) => c.slug === overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const next = arrayMove(categories, oldIndex, newIndex);
-    setCategories(next);
+    const next = arrayMove(lists, oldIndex, newIndex);
+    setLists(next);
 
     fetch("/t/reorder", {
       method: "PATCH",
@@ -174,21 +169,21 @@ export default function CategoriesList({
     });
   };
 
-  const draggedCat = activeDragId
-    ? categories.find((c) => c.slug === activeDragId)
+  const draggedEntry = activeDragId
+    ? lists.find((c) => c.slug === activeDragId)
     : null;
 
   return (
     <div className="screen">
       {filterActive ? (
         <ul className="list">
-          {filteredCategories.map((cat) => (
-            <StaticCategoryRow
-              key={cat.slug}
-              category={cat}
-              onSelect={() => onSelect(cat)}
-              onEdit={() => openRename(cat)}
-              onDelete={() => handleDelete(cat.slug)}
+          {filteredLists.map((entry) => (
+            <StaticListRow
+              key={entry.slug}
+              entry={entry}
+              onSelect={() => onSelect(entry)}
+              onEdit={() => openRename(entry)}
+              onDelete={() => handleDelete(entry.slug)}
             />
           ))}
         </ul>
@@ -199,32 +194,32 @@ export default function CategoriesList({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={categories.map((c) => c.slug)}
+            items={lists.map((c) => c.slug)}
             strategy={verticalListSortingStrategy}
           >
             <ul className="list">
-              {categories.map((cat) => (
-                <SortableCategoryRow
-                  key={cat.slug}
-                  category={cat}
-                  onSelect={() => onSelect(cat)}
-                  onEdit={() => openRename(cat)}
-                  onDelete={() => handleDelete(cat.slug)}
+              {lists.map((entry) => (
+                <SortableListRow
+                  key={entry.slug}
+                  entry={entry}
+                  onSelect={() => onSelect(entry)}
+                  onEdit={() => openRename(entry)}
+                  onDelete={() => handleDelete(entry.slug)}
                 />
               ))}
             </ul>
           </SortableContext>
 
           <DragOverlay>
-            {draggedCat ? (
+            {draggedEntry ? (
               <div className="drag-overlay">
                 <div className="list-item" style={{ borderBottom: "none" }}>
                   <DragHandle />
                   <div className="list-item-content">
-                    <div className="list-item-title">{draggedCat.name}</div>
+                    <div className="list-item-title">{draggedEntry.name}</div>
                   </div>
                   <span className="cat-count">
-                    {draggedCat.done}/{draggedCat.total}
+                    {draggedEntry.done}/{draggedEntry.total}
                   </span>
                 </div>
               </div>
@@ -233,25 +228,23 @@ export default function CategoriesList({
         </DndContext>
       )}
 
-      {categories.length === 0 && !creating && (
+      {lists.length === 0 && !creating && (
         <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
           No todo lists yet. Tap + to create one.
         </p>
       )}
 
-      {categories.length > 0 &&
-        filterActive &&
-        filteredCategories.length === 0 && (
-          <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
-            No matches.
-          </p>
-        )}
+      {lists.length > 0 && filterActive && filteredLists.length === 0 && (
+        <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
+          No matches.
+        </p>
+      )}
 
       {creating && (
         <div className="form">
           <input
             className="input"
-            placeholder="Category name"
+            placeholder="List name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
@@ -290,27 +283,27 @@ export default function CategoriesList({
         </button>
       )}
 
-      {renameCategory && (
+      {renameList && (
         <EditTextDialog
-          title="Edit category"
-          placeholder="Category name"
+          title="Edit list"
+          placeholder="List name"
           text={renameText}
           onChange={setRenameText}
           onSave={saveRename}
-          onClose={() => setRenameCategory(null)}
+          onClose={() => setRenameList(null)}
         />
       )}
     </div>
   );
 }
 
-function SortableCategoryRow({
-  category,
+function SortableListRow({
+  entry,
   onSelect,
   onEdit,
   onDelete,
 }: {
-  category: CategoryListEntry;
+  entry: ListEntry;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -322,7 +315,7 @@ function SortableCategoryRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: category.slug });
+  } = useSortable({ id: entry.slug });
 
   const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
     actionCount: 2,
@@ -341,10 +334,10 @@ function SortableCategoryRow({
           <div className="list-item" style={{ borderBottom: "none" }}>
             <DragHandle listeners={listeners} />
             <div className="list-item-content" style={{ marginLeft: 8 }}>
-              <div className="list-item-title">{category.name}</div>
+              <div className="list-item-title">{entry.name}</div>
             </div>
             <span className="cat-count">
-              {category.done}/{category.total}
+              {entry.done}/{entry.total}
             </span>
           </div>
         </div>
@@ -367,13 +360,13 @@ function SortableCategoryRow({
 }
 
 /** Same row as sortable, without drag — used while the list is filtered (subset reorder would be ambiguous). */
-function StaticCategoryRow({
-  category,
+function StaticListRow({
+  entry,
   onSelect,
   onEdit,
   onDelete,
 }: {
-  category: CategoryListEntry;
+  entry: ListEntry;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -398,10 +391,10 @@ function StaticCategoryRow({
               </svg>
             </div>
             <div className="list-item-content" style={{ marginLeft: 8 }}>
-              <div className="list-item-title">{category.name}</div>
+              <div className="list-item-title">{entry.name}</div>
             </div>
             <span className="cat-count">
-              {category.done}/{category.total}
+              {entry.done}/{entry.total}
             </span>
           </div>
         </div>

@@ -1,9 +1,9 @@
 import { shouldFetchMarkdownBody } from "../lib/markdownSyncPolicy.js";
 import {
-  type CategoryListEntry,
   getMarkdown,
   getPendingMarkdowns,
-  saveCategoriesList,
+  type ListEntry,
+  saveLists,
   saveMarkdown,
 } from "./offlineDb";
 
@@ -41,43 +41,43 @@ async function flushPendingMarkdownPuts(): Promise<void> {
 }
 
 async function pullNewerMarkdownFromServer(): Promise<void> {
-  let list: CategoryListEntry[];
+  let list: ListEntry[];
   try {
     const listRes = await fetch("/", {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!listRes.ok) return;
-    const data = (await listRes.json()) as { categories: CategoryListEntry[] };
-    list = data.categories;
-    await saveCategoriesList(list);
+    const data = (await listRes.json()) as { lists: ListEntry[] };
+    list = data.lists;
+    await saveLists(list);
   } catch {
     return;
   }
 
-  for (const cat of list) {
-    const local = await getMarkdown(cat.slug);
+  for (const entry of list) {
+    const local = await getMarkdown(entry.slug);
     if (
       !shouldFetchMarkdownBody({
-        serverUpdatedAt: cat.updated_at,
+        serverUpdatedAt: entry.updated_at,
         local,
       })
     )
       continue;
     try {
-      const res = await fetch(`/${cat.slug}.md`, { credentials: "include" });
+      const res = await fetch(`/${entry.slug}.md`, { credentials: "include" });
       if (!res.ok) continue;
       const text = await res.text();
       const h = res.headers.get("X-Updated-At");
-      const updatedAt = h ? parseInt(h, 10) : cat.updated_at;
+      const updatedAt = h ? parseInt(h, 10) : entry.updated_at;
       await saveMarkdown({
-        slug: cat.slug,
+        slug: entry.slug,
         text,
         updatedAt,
         pending: false,
       });
     } catch {
-      /* ignore per-category errors */
+      /* ignore per-list errors */
     }
   }
 }

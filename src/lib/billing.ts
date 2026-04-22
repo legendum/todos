@@ -28,8 +28,8 @@ function getUserToken(userId: number): string | null {
   return row?.legendum_token ?? null;
 }
 
-/** Charge for category creation (2 credits). Returns null on success, or an error Response. */
-export async function chargeCategoryCreate(
+/** Charge for list creation (2 credits). Returns null on success, or an error Response. */
+export async function chargeListCreate(
   userId: number,
 ): Promise<Response | null> {
   if (isSelfHosted()) return null;
@@ -39,7 +39,7 @@ export async function chargeCategoryCreate(
     return new Response(
       JSON.stringify({
         error: "payment_required",
-        message: "Link a Legendum account to create categories",
+        message: "Link a Legendum account to create lists",
       }),
       {
         status: 402,
@@ -49,7 +49,7 @@ export async function chargeCategoryCreate(
   }
 
   try {
-    await legendum.charge(token, 2, "todos.in category");
+    await legendum.charge(token, 2, "todos.in list");
     return null;
   } catch (err: any) {
     if (err.code === "insufficient_funds") {

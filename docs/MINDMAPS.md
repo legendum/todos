@@ -9,7 +9,7 @@ This doc is an exploration, not a final spec. The goal is to transplant what wor
 ## 1. Intent
 
 - **User signs up** via Login with Legendum (same flow as todos).
-- **User creates mindmaps** — each is a named map with a unique webhook URL. Each mindmap has **exactly one root**; the mindmap's name *is* the root's label. Renaming the mindmap renames the root. Mindmaps are the equivalent of categories in todos.
+- **User creates mindmaps** — each is a named map with a unique webhook URL. Each mindmap has **exactly one root**; the mindmap's name *is* the root's label. Renaming the mindmap renames the root. Mindmaps are the equivalent of lists in todos.
 - **User edits via an outliner** — Tab/Shift-Tab to indent, Enter for a sibling, click the chevron to collapse/expand, drag a node to reparent.
 - **The canonical format is a nested Markdown bullet list inside a `.md` file** — plain text, renders natively in any Markdown viewer, agent-editable.
 - **Agents** (Claude Code, Cursor, scripts) manage mindmaps through the CLI or webhook, identical to `todos`.
@@ -54,7 +54,7 @@ Stakeholders: eng, marketing, ops.
 
 Rules:
 - Each `- ` (or `* ` / `+ `) line is a **node**. Indentation defines parent/child — 2 spaces per level.
-- **Top-level bullets are the root's direct children.** The root itself is implicit — it's the mindmap. Same shape as todos: `todos.md` doesn't repeat the category name either.
+- **Top-level bullets are the root's direct children.** The root itself is implicit — it's the mindmap. Same shape as todos: `todos.md` doesn't repeat the list name either.
 - Non-bullet lines outside the list are **free-form text**, preserved unchanged across edits.
 - Node identity = full text + position among siblings. No IDs in the external API — same philosophy as todos.
 - Optional per-node state (`[ ]` / `[x]`) is allowed; rendered as a checkbox. Lets a mindmap double as a checklist for a branch.
@@ -72,14 +72,14 @@ Identical to todos — Login with Legendum, email as stable identity, encrypted 
 
 ### 4.2 Home: list of mindmaps
 - `mindmaps.page/` shows the user's mindmaps.
-- Each row: name, **`done/total` count of checkbox nodes** (same roll-up as a todos category; nodes without a `[ ]`/`[x]` marker aren't counted), and last-updated.
-- Drag to reorder (same DnD as todos categories).
+- Each row: name, **`done/total` count of checkbox nodes** (same roll-up as a todos list; nodes without a `[ ]`/`[x]` marker aren't counted), and last-updated.
+- Drag to reorder (same DnD as todos lists).
 - Filter bar at the top (same pattern as todos: matches name and slug).
 - Empty state: "No mindmaps yet. Tap + to create one."
 
 ### 4.3 Single mindmap view
 - `mindmaps.page/<name>` — authenticated.
-- **Header** shows the mindmap name — this is the root of the tree. Click to rename (same pattern as a todos category title, which renames the slug + updates on the home row).
+- **Header** shows the mindmap name — this is the root of the tree. Click to rename (same pattern as a todos list title, which renames the slug + updates on the home row).
 - Two modes, one-tap switch in the header:
   1. **Outline** — the interactive editor (default). Renders the root's children as the top level; the root itself is the page title, not a bullet.
   2. **Source** — raw Markdown, editable as text. Saving round-trips.

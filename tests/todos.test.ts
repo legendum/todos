@@ -6,7 +6,7 @@ import {
   purgeDoneTodos,
   serializeContent,
   toSlug,
-  validateCategoryName,
+  validateListName,
   validateTodosText,
 } from "../src/lib/todos";
 
@@ -163,35 +163,35 @@ describe("toSlug", () => {
   });
 });
 
-describe("validateCategoryName", () => {
+describe("validateListName", () => {
   test("valid names", () => {
-    expect(validateCategoryName("shopping")).toBeNull();
-    expect(validateCategoryName("work-tasks")).toBeNull();
-    expect(validateCategoryName("project.v2")).toBeNull();
-    expect(validateCategoryName("sprint_3")).toBeNull();
-    expect(validateCategoryName("A")).toBeNull();
-    expect(validateCategoryName("My Shopping List")).toBeNull();
-    expect(validateCategoryName("Sprint 3 Tasks")).toBeNull();
+    expect(validateListName("shopping")).toBeNull();
+    expect(validateListName("work-tasks")).toBeNull();
+    expect(validateListName("project.v2")).toBeNull();
+    expect(validateListName("sprint_3")).toBeNull();
+    expect(validateListName("A")).toBeNull();
+    expect(validateListName("My Shopping List")).toBeNull();
+    expect(validateListName("Sprint 3 Tasks")).toBeNull();
   });
 
   test("reserved names", () => {
-    expect(validateCategoryName("t")).toContain("reserved");
-    expect(validateCategoryName("w")).toContain("reserved");
-    expect(validateCategoryName("T")).toContain("reserved");
-    expect(validateCategoryName("W")).toContain("reserved");
+    expect(validateListName("t")).toContain("reserved");
+    expect(validateListName("w")).toContain("reserved");
+    expect(validateListName("T")).toContain("reserved");
+    expect(validateListName("W")).toContain("reserved");
   });
 
   test("empty name", () => {
-    expect(validateCategoryName("")).toContain("required");
-    expect(validateCategoryName("  ")).toContain("required");
+    expect(validateListName("")).toContain("required");
+    expect(validateListName("  ")).toContain("required");
   });
 
   test("name with only special chars", () => {
-    expect(validateCategoryName("!!!")).toContain("at least one letter");
+    expect(validateListName("!!!")).toContain("at least one letter");
   });
 
   test("too long", () => {
-    expect(validateCategoryName("a".repeat(101))).toContain("too long");
+    expect(validateListName("a".repeat(101))).toContain("too long");
   });
 });
 

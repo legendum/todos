@@ -6,7 +6,7 @@ Three small fixes. Each section is self-contained: what, why, where, and the acc
 
 ## 1. Scroll to bottom when opening a todo list
 
-**What**: When the user opens a category (from the home list, deep link, or browser back/forward), the todo list should be scrolled to the bottom on first paint.
+**What**: When the user opens a list (from the home screen, deep link, or browser back/forward), the todo list should be scrolled to the bottom on first paint.
 
 **Why**: The newest todos are at the bottom. Today the list opens at the top, so the user has to scroll down to see what was most recently added — especially jarring after using the CLI, where freshly-added items land at the end.
 
@@ -16,14 +16,14 @@ Three small fixes. Each section is self-contained: what, why, where, and the acc
 
 **Details**:
 - Scroll should be instant (not smooth) — this is an initial-position concern, not a navigation animation.
-- Must fire after lines are rendered, not before (hence `requestAnimationFrame`, or a layout effect keyed on `lines.length` with a "has-scrolled-once" guard per `category.slug`).
-- Keyed on `category.slug`: re-opening a different category re-runs the initial scroll; re-renders within the same category must not re-snap to the bottom (otherwise the user loses their scroll position while editing).
+- Must fire after lines are rendered, not before (hence `requestAnimationFrame`, or a layout effect keyed on `lines.length` with a "has-scrolled-once" guard per `list.slug`).
+- Keyed on `list.slug`: re-opening a different list re-runs the initial scroll; re-renders within the same list must not re-snap to the bottom (otherwise the user loses their scroll position while editing).
 - If the list is shorter than the viewport, the scroll is a no-op — fine.
 
 **Acceptance**:
-- Open a category with > 1 screen of todos → list is scrolled to the bottom.
+- Open a list with > 1 screen of todos → list is scrolled to the bottom.
 - Scroll up, tap/edit an existing todo → list stays where the user left it (no re-snap).
-- Back out, open a different category → that new category opens scrolled to the bottom.
+- Back out, open a different list → that new list opens scrolled to the bottom.
 
 ---
 
@@ -58,14 +58,14 @@ Three small fixes. Each section is self-contained: what, why, where, and the acc
 
 ## 3. Filter bar should filter todos when viewing a list
 
-**What**: When a category is open, typing in the top filter input filters the visible todo items within that list. When on the home screen, it filters categories (unchanged from today).
+**What**: When a list is open, typing in the top filter input filters the visible todo items within that list. When on the home screen, it filters lists (unchanged from today).
 
-**Why**: The filter is already pinned to the top of the viewport, and users reach for it instinctively inside a list. Today, typing there yanks them back to the home screen (see `App.tsx` line 138–142: `if (next.length > 0 && selectedCategory) goBack();`) — a surprising redirect that this fix removes.
+**Why**: The filter is already pinned to the top of the viewport, and users reach for it instinctively inside a list. Today, typing there yanks them back to the home screen (see `App.tsx` line 138–142: `if (next.length > 0 && selectedList) goBack();`) — a surprising redirect that this fix removes.
 
 **Where**:
 - `src/web/App.tsx` — remove the `goBack()` side-effect in `handleSetFilterQuery`. The query should simply flow through to whichever view is mounted.
 - `src/web/components/TodoList.tsx` — accept `filterQuery` as a prop and apply it to the rendered rows.
-- `src/web/components/CategoriesList.tsx` — no change; it already consumes `filterQuery`.
+- `src/web/components/Lists.tsx` — no change; it already consumes `filterQuery`.
 
 **Filtering rules inside a list**:
 - Case-insensitive substring match against the todo's `text`.
@@ -76,12 +76,12 @@ Three small fixes. Each section is self-contained: what, why, where, and the acc
 - Clearing the filter (× button, or empty input) restores the full list with the user's scroll roughly where it was — don't snap back to top or bottom.
 
 **What stays the same**:
-- Home screen behaviour: filter matches against category name **and** slug, exactly as today.
+- Home screen behaviour: filter matches against list name **and** slug, exactly as today.
 - The filter input itself, its placeholder (`"Filter..."`), keyboard behaviour, and pinned-to-visual-viewport logic in `TopBar.tsx`.
 
 **Acceptance**:
-- On home, typing `gro` narrows the category list (unchanged).
-- Open a category, type `milk` → only todo rows containing "milk" (case-insensitive) remain visible; free-form lines are hidden; the user stays in the list (no redirect home).
+- On home, typing `gro` narrows the list of lists (unchanged).
+- Open a list, type `milk` → only todo rows containing "milk" (case-insensitive) remain visible; free-form lines are hidden; the user stays in the list (no redirect home).
 - Clear the filter → full list returns, scroll position preserved.
 - Check a filtered item as done → it updates the correct row; on clearing the filter the change is in the right place in the full list.
-- Hit back → returns to home with the filter value preserved (or cleared — pick one and note it; recommendation: **preserve** so the user can keep scanning across categories).
+- Hit back → returns to home with the filter value preserved (or cleared — pick one and note it; recommendation: **preserve** so the user can keep scanning across lists).

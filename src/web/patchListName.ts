@@ -1,5 +1,5 @@
-/** PATCH /:slug — rename category. */
-export async function patchCategoryName(
+/** PATCH /:slug — rename list. */
+export async function patchListName(
   slug: string,
   name: string,
 ): Promise<{ name: string; slug: string } | null> {

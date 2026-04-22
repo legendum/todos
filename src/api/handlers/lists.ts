@@ -1,17 +1,17 @@
-import { chargeCategoryCreate } from "../../lib/billing.js";
+import { chargeListCreate } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast } from "../../lib/sse.js";
 import {
   countTodos,
   toSlug,
-  validateCategoryName,
+  validateListName,
   validateTodosText,
 } from "../../lib/todos.js";
 import { ulid } from "../../lib/ulid.js";
 import { json } from "../json.js";
 
-type CategoryRow = {
+type ListRow = {
   id: number;
   user_id: number;
   ulid: string;
@@ -23,16 +23,16 @@ type CategoryRow = {
   updated_at: number;
 };
 
-/** GET / — list all categories */
-export function listCategories(userId: number): Response {
+/** GET / — list all lists */
+export function indexLists(userId: number): Response {
   const db = getDb();
   const rows = db
     .query(
-      "SELECT id, ulid, name, slug, position, text, created_at, updated_at FROM categories WHERE user_id = ? ORDER BY position, id",
+      "SELECT id, ulid, name, slug, position, text, created_at, updated_at FROM lists WHERE user_id = ? ORDER BY position, id",
     )
-    .all(userId) as CategoryRow[];
+    .all(userId) as ListRow[];
 
-  const categories = rows.map((r) => {
+  const lists = rows.map((r) => {
     const { total, done } = countTodos(r.text);
     const updated_at = r.updated_at ?? r.created_at;
     return {
@@ -46,11 +46,11 @@ export function listCategories(userId: number): Response {
     };
   });
 
-  return json({ categories });
+  return json({ lists });
 }
 
-/** POST / — create category */
-export async function createCategory(
+/** POST / — create list */
+export async function createList(
   req: Request,
   userId: number,
 ): Promise<Response> {
@@ -62,7 +62,7 @@ export async function createCategory(
   }
 
   const name = body.name?.trim();
-  const nameError = validateCategoryName(name || "");
+  const nameError = validateListName(name || "");
   if (nameError)
     return json({ error: "invalid_request", message: nameError }, 400);
 
@@ -71,32 +71,32 @@ export async function createCategory(
 
   // Check uniqueness on slug per user
   const existing = db
-    .query("SELECT 1 FROM categories WHERE user_id = ? AND slug = ?")
+    .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?")
     .get(userId, slug);
   if (existing) {
     return json(
       {
         error: "invalid_request",
-        message: `A category with URL "${slug}" already exists`,
+        message: `A list with URL "${slug}" already exists`,
       },
       400,
     );
   }
 
-  // Charge for category creation
-  const chargeError = await chargeCategoryCreate(userId);
+  // Charge for list creation
+  const chargeError = await chargeListCreate(userId);
   if (chargeError) return chargeError;
 
   // Get next position
   const maxPos = db
     .query(
-      "SELECT COALESCE(MAX(position), -1) as max_pos FROM categories WHERE user_id = ?",
+      "SELECT COALESCE(MAX(position), -1) as max_pos FROM lists WHERE user_id = ?",
     )
     .get(userId) as { max_pos: number };
 
   const id = ulid();
   db.run(
-    "INSERT INTO categories (user_id, ulid, name, slug, position) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO lists (user_id, ulid, name, slug, position) VALUES (?, ?, ?, ?, ?)",
     userId,
     id,
     name,
@@ -119,14 +119,14 @@ export async function createCategory(
 /** GET /:slug — get todos (supports content negotiation). `null` means serve SPA HTML. */
 export function getTodos(
   req: Request,
-  categorySlug: string,
+  listSlug: string,
   userId: number,
 ): Response | null {
   const db = getDb();
 
   // Strip extension for content negotiation
   let format = "html";
-  let slug = categorySlug;
+  let slug = listSlug;
   if (slug.endsWith(".md")) {
     format = "text";
     slug = slug.slice(0, -3);
@@ -142,11 +142,11 @@ export function getTodos(
 
   const row = db
     .query(
-      "SELECT ulid, name, slug, text, position, updated_at, created_at FROM categories WHERE user_id = ? AND slug = ?",
+      "SELECT ulid, name, slug, text, position, updated_at, created_at FROM lists WHERE user_id = ? AND slug = ?",
     )
-    .get(userId, slug) as CategoryRow | undefined;
+    .get(userId, slug) as ListRow | undefined;
 
-  if (!row) return json({ error: "not_found", reason: "category" }, 404);
+  if (!row) return json({ error: "not_found", reason: "list" }, 404);
 
   if (format === "text") {
     return new Response(row.text, {
@@ -177,17 +177,17 @@ export function getTodos(
 /** PUT or POST /:slug — replace all todos (raw markdown or JSON `{ markdown }` / `{ text }`). */
 export async function replaceTodos(
   req: Request,
-  categorySlug: string,
+  listSlug: string,
   userId: number,
 ): Promise<Response> {
   const db = getDb();
   const row = db
     .query(
-      "SELECT id, ulid, name, slug, text FROM categories WHERE user_id = ? AND slug = ?",
+      "SELECT id, ulid, name, slug, text FROM lists WHERE user_id = ? AND slug = ?",
     )
-    .get(userId, categorySlug) as CategoryRow | undefined;
+    .get(userId, listSlug) as ListRow | undefined;
 
-  if (!row) return json({ error: "not_found", reason: "category" }, 404);
+  if (!row) return json({ error: "not_found", reason: "list" }, 404);
 
   const ct = req.headers.get("Content-Type") ?? "";
   let text: string;
@@ -232,7 +232,7 @@ export async function replaceTodos(
 
   const now = Math.floor(Date.now() / 1000);
   db.run(
-    "UPDATE categories SET text = ?, updated_at = ? WHERE id = ?",
+    "UPDATE lists SET text = ?, updated_at = ? WHERE id = ?",
     text,
     now,
     row.id,
@@ -251,24 +251,24 @@ export async function replaceTodos(
   });
 }
 
-/** DELETE /:slug — delete category */
-export function deleteCategory(categorySlug: string, userId: number): Response {
+/** DELETE /:slug — delete list */
+export function deleteList(listSlug: string, userId: number): Response {
   const db = getDb();
   const result = db.run(
-    "DELETE FROM categories WHERE user_id = ? AND slug = ?",
+    "DELETE FROM lists WHERE user_id = ? AND slug = ?",
     userId,
-    categorySlug,
+    listSlug,
   );
 
   if (result.changes === 0)
-    return json({ error: "not_found", reason: "category" }, 404);
+    return json({ error: "not_found", reason: "list" }, 404);
   return json({ ok: true });
 }
 
-/** PATCH /:slug — rename category */
-export async function renameCategory(
+/** PATCH /:slug — rename list */
+export async function renameList(
   req: Request,
-  categorySlug: string,
+  listSlug: string,
   userId: number,
 ): Promise<Response> {
   let body: { name?: string };
@@ -279,7 +279,7 @@ export async function renameCategory(
   }
 
   const name = body.name?.trim();
-  const nameError = validateCategoryName(name || "");
+  const nameError = validateListName(name || "");
   if (nameError)
     return json({ error: "invalid_request", message: nameError }, 400);
 
@@ -287,21 +287,21 @@ export async function renameCategory(
   const db = getDb();
 
   const row = db
-    .query("SELECT id, slug FROM categories WHERE user_id = ? AND slug = ?")
-    .get(userId, categorySlug) as CategoryRow | undefined;
+    .query("SELECT id, slug FROM lists WHERE user_id = ? AND slug = ?")
+    .get(userId, listSlug) as ListRow | undefined;
 
-  if (!row) return json({ error: "not_found", reason: "category" }, 404);
+  if (!row) return json({ error: "not_found", reason: "list" }, 404);
 
   // Check slug uniqueness if slug changed
   if (newSlug !== row.slug) {
     const existing = db
-      .query("SELECT 1 FROM categories WHERE user_id = ? AND slug = ?")
+      .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?")
       .get(userId, newSlug);
     if (existing) {
       return json(
         {
           error: "invalid_request",
-          message: `A category with URL "${newSlug}" already exists`,
+          message: `A list with URL "${newSlug}" already exists`,
         },
         400,
       );
@@ -309,17 +309,17 @@ export async function renameCategory(
   }
 
   db.run(
-    "UPDATE categories SET name = ?, slug = ? WHERE id = ?",
+    "UPDATE lists SET name = ?, slug = ? WHERE id = ?",
     name,
     newSlug,
     row.id,
   );
 
-  return json({ name, slug: newSlug, old_slug: categorySlug });
+  return json({ name, slug: newSlug, old_slug: listSlug });
 }
 
-/** PATCH /t/reorder — reorder categories */
-export async function reorderCategories(
+/** PATCH /t/reorder — reorder lists */
+export async function reorderLists(
   req: Request,
   userId: number,
 ): Promise<Response> {
@@ -334,7 +334,7 @@ export async function reorderCategories(
     return json(
       {
         error: "invalid_request",
-        message: "order must be an array of category slugs",
+        message: "order must be an array of list slugs",
       },
       400,
     );
@@ -342,7 +342,7 @@ export async function reorderCategories(
 
   const db = getDb();
   const stmt = db.prepare(
-    "UPDATE categories SET position = ? WHERE user_id = ? AND slug = ?",
+    "UPDATE lists SET position = ? WHERE user_id = ? AND slug = ?",
   );
 
   for (let i = 0; i < body.order.length; i++) {

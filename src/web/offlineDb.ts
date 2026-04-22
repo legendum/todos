@@ -1,9 +1,9 @@
-/** IndexedDB mirror for category markdown + list (offline reads / pending PUT replay). */
+/** IndexedDB mirror for list markdown + list of lists (offline reads / pending PUT replay). */
 
 const DB_NAME = "todos-offline";
 const DB_VERSION = 1;
 
-export type CategoryListEntry = {
+export type ListEntry = {
   name: string;
   slug: string;
   ulid: string;
@@ -44,8 +44,8 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 type MetaRow = {
-  key: "categoriesList";
-  categories: CategoryListEntry[];
+  key: "lists";
+  lists: ListEntry[];
   fetchedAt: number;
 };
 
@@ -72,25 +72,21 @@ async function writeMeta(row: MetaRow): Promise<void> {
   });
 }
 
-export async function saveCategoriesList(
-  categories: CategoryListEntry[],
-): Promise<void> {
+export async function saveLists(lists: ListEntry[]): Promise<void> {
   await writeMeta({
-    key: "categoriesList",
-    categories,
+    key: "lists",
+    lists,
     fetchedAt: Date.now(),
   });
 }
 
-export async function getCategoriesList(): Promise<CategoryListEntry[] | null> {
-  const row = await readMeta("categoriesList");
-  return row?.categories ?? null;
+export async function getLists(): Promise<ListEntry[] | null> {
+  const row = await readMeta("lists");
+  return row?.lists ?? null;
 }
 
-export async function findCategoryInList(
-  slug: string,
-): Promise<CategoryListEntry | null> {
-  const list = await getCategoriesList();
+export async function findListInCache(slug: string): Promise<ListEntry | null> {
+  const list = await getLists();
   return list?.find((c) => c.slug === slug) ?? null;
 }
 

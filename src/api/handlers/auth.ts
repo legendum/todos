@@ -4,7 +4,7 @@ import {
   setAuthCookieHeader,
 } from "../../lib/auth.js";
 import { getDb } from "../../lib/db.js";
-import { seedDefaultCategoriesForNewUser } from "../../lib/seed-default-categories.js";
+import { seedDefaultListsForNewUser } from "../../lib/seed-default-lists.js";
 import { json } from "../json.js";
 
 // @ts-expect-error — pure JS SDK
@@ -95,7 +95,7 @@ export async function getCallback(req: Request): Promise<Response> {
     user = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
       id: number;
     };
-    seedDefaultCategoriesForNewUser(user.id);
+    seedDefaultListsForNewUser(user.id);
   } else if (serviceToken) {
     // Update billing token (may change across devices/sessions)
     db.run(

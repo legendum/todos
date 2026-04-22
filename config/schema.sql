@@ -11,12 +11,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at     INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
--- Categories: each category is a named todo list with a unique webhook URL.
+-- Lists: each list is a named todo list with a unique webhook URL.
 -- name: display name as typed by user (may contain spaces).
 -- slug: URL-safe version (lowercase, spaces/underscores → hyphens). Unique per user.
 -- text: the raw todos.md content (free-form text + todo lines).
 -- position: user-defined ordering on the main screen.
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS lists (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL REFERENCES users(id),
   ulid       TEXT NOT NULL UNIQUE,
@@ -29,6 +29,6 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
-CREATE INDEX IF NOT EXISTS idx_categories_ulid ON categories(ulid);
-CREATE INDEX IF NOT EXISTS idx_categories_user_slug ON categories(user_id, slug);
+CREATE INDEX IF NOT EXISTS idx_lists_user ON lists(user_id);
+CREATE INDEX IF NOT EXISTS idx_lists_ulid ON lists(ulid);
+CREATE INDEX IF NOT EXISTS idx_lists_user_slug ON lists(user_id, slug);

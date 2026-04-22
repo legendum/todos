@@ -57,8 +57,8 @@ export function isReservedSlug(slug: string): boolean {
   return RESERVED_SLUGS.has(slug);
 }
 
-/** Validate a category name. Returns null if valid, or an error message. */
-export function validateCategoryName(name: string): string | null {
+/** Validate a list name. Returns null if valid, or an error message. */
+export function validateListName(name: string): string | null {
   if (!name || name.trim().length === 0) return "Name is required";
   if (name.length > 100) return "Name is too long";
   const slug = toSlug(name);

@@ -9,7 +9,7 @@ service:
   id: todos
   mention: todos                    # what the user types after @
   display_name: Todos
-  description: List and manage todos.in task lists (markdown per category)
+  description: List and manage todos.in task lists (markdown per list)
 
 server:
   base_url: https://todos.in
@@ -23,40 +23,40 @@ auth:
     path: /t/legendum/link-key
     method: POST
 
-# URL suffix: list uses GET / (JSON). Read/write category use .md (read) or .json (response shape after write) on /{category}.
+# URL suffix: list uses GET / (JSON). Read/write list use .md (read) or .json (response shape after write) on /{list}.
 
 # --------------------------------------------------------------------------
-# Tools (model sees todos__<id>, e.g. todos__list_categories)
+# Tools (model sees todos__<id>, e.g. todos__list_lists)
 # --------------------------------------------------------------------------
 
 tools:
-  - id: list_categories
-    title: List todo categories
+  - id: list_lists
+    title: List todo lists
     description: >
-      Returns JSON: categories[] with slug, name, counts, etc. The path parameter
-      for read_category and write_category must be categories[].slug (URL slug),
+      Returns JSON: lists[] with slug, name, counts, etc. The path parameter
+      for read_list and write_list must be lists[].slug (URL slug),
       not the display name. Call this before read/write if the slug is unknown.
     path: /
     method: GET
     expose: [actions, model]
     content_type: json
 
-  - id: read_category
+  - id: read_list
     title: Read todo document
     description: >
-      Fetch the full markdown document for one category. Tasks are line-based
+      Fetch the full markdown document for one list. Tasks are line-based
       markdown (e.g. "- [ ] …"). To change todos, edit the markdown and call
-      write_category with the complete updated body.
-    path: /{category}
+      write_list with the complete updated body.
+    path: /{list}
     method: GET
     expose: [model]
     content_type: markdown
     parameters:
-      - name: category
+      - name: list
         in: path
-        label: Category slug
+        label: List slug
         description: >
-          Exact slug string from list_categories (categories[].slug), e.g. today or health.
+          Exact slug string from list_lists (lists[].slug), e.g. today or health.
           Do not pass the human-readable name field.
         required: true
         input: dropdown
@@ -65,22 +65,22 @@ tools:
           value: slug
           label: name
 
-  - id: write_category
+  - id: write_list
     title: Write todo document
     description: >
-      Replace the entire markdown for a category. The body must be the full
+      Replace the entire markdown for a list. The body must be the full
       document (not a patch). Use the same markdown task-list format as returned
-      by read_category.
-    path: /{category}
+      by read_list.
+    path: /{list}
     method: PUT
     expose: [model]
     content_type: json
     parameters:
-      - name: category
+      - name: list
         in: path
-        label: Category slug
+        label: List slug
         description: >
-          Exact slug string from list_categories (categories[].slug), e.g. today or health.
+          Exact slug string from list_lists (lists[].slug), e.g. today or health.
           Do not pass the human-readable name field.
         required: true
         input: dropdown

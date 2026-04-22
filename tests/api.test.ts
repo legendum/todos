@@ -66,7 +66,7 @@ describe("API — self-hosted mode", () => {
     expect(body.legendum_linked).toBe(false);
   });
 
-  test("POST / creates a category", async () => {
+  test("POST / creates a list", async () => {
     const { status, body } = await jsonPost("/", { name: "groceries" });
     expect(status).toBe(201);
     expect(body.name).toBe("groceries");
@@ -75,7 +75,7 @@ describe("API — self-hosted mode", () => {
     expect(body.webhook_url).toStartWith("/w/");
   });
 
-  test("POST / creates a category with spaces", async () => {
+  test("POST / creates a list with spaces", async () => {
     const { status, body } = await jsonPost("/", { name: "My Shopping List" });
     expect(status).toBe(201);
     expect(body.name).toBe("My Shopping List");
@@ -88,7 +88,7 @@ describe("API — self-hosted mode", () => {
     expect(status).toBe(400);
   });
 
-  test("POST / rejects duplicate category", async () => {
+  test("POST / rejects duplicate list", async () => {
     const { status } = await jsonPost("/", { name: "groceries" });
     expect(status).toBe(400);
   });
@@ -99,12 +99,12 @@ describe("API — self-hosted mode", () => {
     expect(body.message).toContain("reserved");
   });
 
-  test("GET / lists categories", async () => {
+  test("GET / lists all lists", async () => {
     const { status, body } = await jsonGet("/");
     expect(status).toBe(200);
-    expect(body.categories.length).toBe(4);
+    expect(body.lists.length).toBe(4);
     const bySlug = Object.fromEntries(
-      body.categories.map((c: { slug: string }) => [c.slug, c]),
+      body.lists.map((c: { slug: string }) => [c.slug, c]),
     );
     expect(bySlug.today?.name).toBe("Today");
     expect(bySlug.ideas?.name).toBe("Ideas");
@@ -125,13 +125,13 @@ describe("API — self-hosted mode", () => {
     });
     expect(put.status).toBe(200);
     const { body } = await jsonGet("/");
-    const groceries = body.categories.find(
+    const groceries = body.lists.find(
       (c: { slug: string }) => c.slug === "groceries",
     );
     expect(groceries.updated_at).toBeGreaterThanOrEqual(t0);
   });
 
-  test("GET /:slug works for category with spaces in name", async () => {
+  test("GET /:slug works for list with spaces in name", async () => {
     const res = await fetch(`${base}/my-shopping-list.json`, {
       headers: { Accept: "application/json" },
     });
@@ -141,12 +141,12 @@ describe("API — self-hosted mode", () => {
     expect(data.slug).toBe("my-shopping-list");
   });
 
-  test("DELETE category with slug", async () => {
+  test("DELETE list with slug", async () => {
     const res = await fetch(`${base}/my-shopping-list`, { method: "DELETE" });
     expect(res.status).toBe(200);
   });
 
-  test("PUT /:category replaces todos", async () => {
+  test("PUT /:list replaces todos", async () => {
     const text = "## Shopping\n[ ] Milk\n[x] Bread\n[ ] Eggs";
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
@@ -159,7 +159,7 @@ describe("API — self-hosted mode", () => {
     expect(data.done).toBe(1);
   });
 
-  test("PUT /:category.json is the same route as PUT /:category (slug excludes extension)", async () => {
+  test("PUT /:list.json is the same route as PUT /:list (slug excludes extension)", async () => {
     const text = "[ ] Via dot-json path\n[x] Done";
     const res = await fetch(`${base}/groceries.json`, {
       method: "PUT",
@@ -176,7 +176,7 @@ describe("API — self-hosted mode", () => {
     });
   });
 
-  test("PUT /:category accepts JSON { markdown }", async () => {
+  test("PUT /:list accepts JSON { markdown }", async () => {
     const text = "[ ] JSON body todo\n[x] Done via JSON";
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
@@ -198,7 +198,7 @@ describe("API — self-hosted mode", () => {
     });
   });
 
-  test("PUT /:category accepts JSON { text } alias", async () => {
+  test("PUT /:list accepts JSON { text } alias", async () => {
     const text = "[ ] Via text key\n[x] Done";
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
@@ -215,7 +215,7 @@ describe("API — self-hosted mode", () => {
     });
   });
 
-  test("PUT /:category JSON without markdown or text returns 400", async () => {
+  test("PUT /:list JSON without markdown or text returns 400", async () => {
     const res = await fetch(`${base}/groceries`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -226,7 +226,7 @@ describe("API — self-hosted mode", () => {
     expect(data.error).toBe("invalid_request");
   });
 
-  test("GET /:category.md returns markdown", async () => {
+  test("GET /:list.md returns markdown", async () => {
     const res = await fetch(`${base}/groceries.md`);
     expect(res.status).toBe(200);
     const text = await res.text();
@@ -235,7 +235,7 @@ describe("API — self-hosted mode", () => {
     expect(text).toContain("## Shopping");
   });
 
-  test("GET /:category.json returns JSON", async () => {
+  test("GET /:list.json returns JSON", async () => {
     const { status, body } = await jsonGet("/groceries.json");
     expect(status).toBe(200);
     expect(body.name).toBe("groceries");
@@ -243,7 +243,7 @@ describe("API — self-hosted mode", () => {
     expect(body.text).toContain("[ ] Milk");
   });
 
-  test("POST /:category also replaces (same as PUT)", async () => {
+  test("POST /:list also replaces (same as PUT)", async () => {
     const text = "[ ] Only todo";
     const res = await fetch(`${base}/groceries`, {
       method: "POST",
@@ -258,21 +258,21 @@ describe("API — self-hosted mode", () => {
   test("webhook GET returns todos", async () => {
     // Get ulid
     const { body } = await jsonGet("/");
-    const ulid = body.categories.find(
+    const ulid = body.lists.find(
       (c: { slug: string }) => c.slug === "groceries",
     ).ulid;
 
     const res = await fetch(`${base}/w/${ulid}`);
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-Category-Slug")).toBe("groceries");
-    expect(res.headers.get("X-Category-Name")).toBe("groceries");
+    expect(res.headers.get("X-List-Slug")).toBe("groceries");
+    expect(res.headers.get("X-List-Name")).toBe("groceries");
     const text = await res.text();
     expect(text).toContain("[ ] Only todo");
   });
 
   test("webhook PUT replaces todos", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories.find(
+    const ulid = body.lists.find(
       (c: { slug: string }) => c.slug === "groceries",
     ).ulid;
 
@@ -291,7 +291,7 @@ describe("API — self-hosted mode", () => {
 
   test("webhook POST also replaces (same as PUT)", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories.find(
+    const ulid = body.lists.find(
       (c: { slug: string }) => c.slug === "groceries",
     ).ulid;
 
@@ -312,8 +312,8 @@ describe("API — self-hosted mode", () => {
     expect(res.status).toBe(404);
   });
 
-  test("PATCH /t/reorder reorders categories", async () => {
-    // Create another category
+  test("PATCH /t/reorder reorders lists", async () => {
+    // Create another list
     await jsonPost("/", { name: "work" });
 
     const res = await fetch(`${base}/t/reorder`, {
@@ -326,17 +326,17 @@ describe("API — self-hosted mode", () => {
     expect(res.status).toBe(200);
 
     const { body } = await jsonGet("/");
-    expect(body.categories[0].name).toBe("work");
-    expect(body.categories[1].name).toBe("groceries");
+    expect(body.lists[0].name).toBe("work");
+    expect(body.lists[1].name).toBe("groceries");
   });
 
-  test("DELETE /:category deletes a category", async () => {
+  test("DELETE /:list deletes a list", async () => {
     const res = await fetch(`${base}/work`, { method: "DELETE" });
     expect(res.status).toBe(200);
 
     const { body } = await jsonGet("/");
-    expect(body.categories.length).toBe(3);
-    const names = body.categories.map((c: { name: string }) => c.name);
+    expect(body.lists.length).toBe(3);
+    const names = body.lists.map((c: { name: string }) => c.name);
     expect(names).toContain("groceries");
     expect(names).toContain("Today");
     expect(names).toContain("Ideas");
@@ -371,7 +371,7 @@ Context: we need to ship by Friday
 
   test("SSE endpoint returns event stream", async () => {
     const { body } = await jsonGet("/");
-    const ulid = body.categories.find(
+    const ulid = body.lists.find(
       (c: { slug: string }) => c.slug === "groceries",
     ).ulid;
 

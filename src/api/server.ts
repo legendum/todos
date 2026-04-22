@@ -3,14 +3,14 @@ import { setAuthCookieHeader } from "../lib/auth.js";
 import { closeTabs } from "../lib/billing.js";
 import { getDb } from "../lib/db.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
-import { seedDefaultCategoriesForNewUser } from "../lib/seed-default-categories.js";
+import { seedDefaultListsForNewUser } from "../lib/seed-default-lists.js";
 import { requireAuthAsync } from "./auth-middleware.js";
 import { json } from "./json.js";
 
 const root = resolve(import.meta.dir, "../..");
 
 import * as authHandlers from "./handlers/auth.js";
-import * as categoryHandlers from "./handlers/categories.js";
+import * as listHandlers from "./handlers/lists.js";
 import * as settingsHandlers from "./handlers/settings.js";
 import * as webhookHandlers from "./handlers/webhook.js";
 
@@ -64,7 +64,7 @@ const legendumMiddleware = legendumSdk.isConfigured()
           row = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
             id: number;
           };
-          seedDefaultCategoriesForNewUser(row.id);
+          seedDefaultListsForNewUser(row.id);
         } else {
           db.run(
             "UPDATE users SET legendum_token = ? WHERE id = ?",
@@ -91,22 +91,22 @@ function addCors(res: Response): Response {
   return r;
 }
 
-const CATEGORY_SLUG = "[a-zA-Z0-9][a-zA-Z0-9._-]*";
+const LIST_SLUG = "[a-zA-Z0-9][a-zA-Z0-9._-]*";
 
 /**
  * `/slug`, `/slug.md`, or `/slug.json`. Two patterns are required: if `.` is
  * allowed inside the slug, a single alternation would let `groceries.json`
  * match as slug `groceries.json` with no extension (PUT would 404).
  */
-function matchCategoryPath(path: string): {
+function matchListPath(path: string): {
   slug: string;
   ext?: "md" | "json";
 } | null {
-  const withExt = path.match(new RegExp(`^\\/(${CATEGORY_SLUG})\\.(md|json)$`));
+  const withExt = path.match(new RegExp(`^\\/(${LIST_SLUG})\\.(md|json)$`));
   if (withExt) {
     return { slug: withExt[1], ext: withExt[2] as "md" | "json" };
   }
-  const plain = path.match(new RegExp(`^\\/(${CATEGORY_SLUG})$`));
+  const plain = path.match(new RegExp(`^\\/(${LIST_SLUG})$`));
   if (plain) return { slug: plain[1] };
   return null;
 }
@@ -274,42 +274,42 @@ export default {
       if (!user) {
         db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
         user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
-        seedDefaultCategoriesForNewUser(user.id);
+        seedDefaultListsForNewUser(user.id);
       }
       const userId = user.id;
 
-      // Categories API
+      // Lists API
       if (path === "/" && method === "GET") {
         const accept = req.headers.get("Accept") ?? "";
         if (accept.includes("application/json")) {
-          return addCors(categoryHandlers.listCategories(userId));
+          return addCors(listHandlers.indexLists(userId));
         }
         return await serveIndex();
       }
       if (path === "/" && method === "POST") {
-        res = await categoryHandlers.createCategory(req, userId);
+        res = await listHandlers.createList(req, userId);
         return addCors(res);
       }
       if (path === "/t/reorder" && method === "PATCH") {
-        res = await categoryHandlers.reorderCategories(req, userId);
+        res = await listHandlers.reorderLists(req, userId);
         return addCors(res);
       }
       if (path === "/t/settings/me" && method === "GET") {
         return addCors(settingsHandlers.getMe(userId));
       }
 
-      // Category routes
-      const catParsed = matchCategoryPath(path);
+      // List routes
+      const listParsed = matchListPath(path);
       if (
-        catParsed &&
+        listParsed &&
         !path.startsWith("/t/") &&
         !path.startsWith("/w/") &&
         !path.startsWith("/dist/")
       ) {
-        const { slug, ext } = catParsed;
+        const { slug, ext } = listParsed;
 
         if (method === "GET") {
-          const result = categoryHandlers.getTodos(
+          const result = listHandlers.getTodos(
             req,
             ext ? `${slug}.${ext}` : slug,
             userId,
@@ -318,15 +318,15 @@ export default {
           return addCors(result);
         }
         if (method === "PUT" || method === "POST") {
-          res = await categoryHandlers.replaceTodos(req, slug, userId);
+          res = await listHandlers.replaceTodos(req, slug, userId);
           return addCors(res);
         }
         if (method === "PATCH") {
-          res = await categoryHandlers.renameCategory(req, slug, userId);
+          res = await listHandlers.renameList(req, slug, userId);
           return addCors(res);
         }
         if (method === "DELETE") {
-          return addCors(categoryHandlers.deleteCategory(slug, userId));
+          return addCors(listHandlers.deleteList(slug, userId));
         }
       }
 
@@ -397,34 +397,34 @@ export default {
       if (legendumRes) return addCors(legendumRes);
     }
 
-    // Categories API
+    // Lists API
     if (path === "/" && method === "GET") {
-      return addCors(categoryHandlers.listCategories(userId));
+      return addCors(listHandlers.indexLists(userId));
     }
     if (path === "/" && method === "POST") {
-      res = await categoryHandlers.createCategory(req, userId);
+      res = await listHandlers.createList(req, userId);
       return addCors(res);
     }
     if (path === "/t/reorder" && method === "PATCH") {
-      res = await categoryHandlers.reorderCategories(req, userId);
+      res = await listHandlers.reorderLists(req, userId);
       return addCors(res);
     }
     if (path === "/t/settings/me" && method === "GET") {
       return addCors(settingsHandlers.getMe(userId));
     }
 
-    // Category routes (authenticated)
-    const catParsed = matchCategoryPath(path);
+    // List routes (authenticated)
+    const listParsed = matchListPath(path);
     if (
-      catParsed &&
+      listParsed &&
       !path.startsWith("/t/") &&
       !path.startsWith("/w/") &&
       !path.startsWith("/dist/")
     ) {
-      const { slug, ext } = catParsed;
+      const { slug, ext } = listParsed;
 
       if (method === "GET") {
-        const result = categoryHandlers.getTodos(
+        const result = listHandlers.getTodos(
           req,
           ext ? `${slug}.${ext}` : slug,
           userId,
@@ -433,15 +433,15 @@ export default {
         return addCors(result);
       }
       if (method === "PUT" || method === "POST") {
-        res = await categoryHandlers.replaceTodos(req, slug, userId);
+        res = await listHandlers.replaceTodos(req, slug, userId);
         return addCors(res);
       }
       if (method === "PATCH") {
-        res = await categoryHandlers.renameCategory(req, slug, userId);
+        res = await listHandlers.renameList(req, slug, userId);
         return addCors(res);
       }
       if (method === "DELETE") {
-        return addCors(categoryHandlers.deleteCategory(slug, userId));
+        return addCors(listHandlers.deleteList(slug, userId));
       }
     }
 

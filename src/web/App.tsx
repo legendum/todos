@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  categoryFromTodoJson,
-  type TodoCategoryJson,
-} from "./categoryFromJson";
-import CategoriesList from "./components/CategoriesList";
+import Lists from "./components/Lists";
 import Login from "./components/Login";
 import TodoList from "./components/TodoList";
 import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
-import { type CategoryListEntry, findCategoryInList } from "./offlineDb";
+import { listFromTodoJson, type TodoListJson } from "./listFromJson";
+import { findListInCache, type ListEntry } from "./offlineDb";
 
 type User = {
   legendum_linked: boolean;
@@ -30,29 +27,28 @@ function getSlugFromPath(): string | null {
   return slug || null;
 }
 
-/** Resolve a slug to a CategoryListEntry, preferring the network and falling
- * back to the offline list cache. */
-async function resolveSlug(slug: string): Promise<CategoryListEntry | null> {
+/** Resolve a slug to a ListEntry, preferring the network and falling back to
+ * the offline list cache. */
+async function resolveSlug(slug: string): Promise<ListEntry | null> {
   try {
     const r = await fetch(`/${slug}.json`, {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (r.ok) {
-      const data = (await r.json()) as TodoCategoryJson;
-      if (data?.slug) return categoryFromTodoJson(data);
+      const data = (await r.json()) as TodoListJson;
+      if (data?.slug) return listFromTodoJson(data);
     }
   } catch {
     /* fall through to cache */
   }
-  return (await findCategoryInList(slug)) ?? null;
+  return (await findListInCache(slug)) ?? null;
 }
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] =
-    useState<CategoryListEntry | null>(null);
+  const [selectedList, setSelectedList] = useState<ListEntry | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
   const isSelfHosted = user ? !user.hosted : false;
@@ -79,15 +75,15 @@ export default function App() {
     fetchUser().finally(() => setLoading(false));
   }, [fetchUser]);
 
-  // On initial load, if the URL has a slug, fetch that category (or use cached list)
+  // On initial load, if the URL has a slug, fetch that list (or use cached list)
   useEffect(() => {
     if (!user || loading) return;
     const slug = getSlugFromPath();
     if (!slug) return;
 
     let cancelled = false;
-    void resolveSlug(slug).then((cat) => {
-      if (!cancelled && cat) setSelectedCategory(cat);
+    void resolveSlug(slug).then((entry) => {
+      if (!cancelled && entry) setSelectedList(entry);
     });
 
     return () => {
@@ -100,23 +96,23 @@ export default function App() {
     const onPopState = () => {
       const slug = getSlugFromPath();
       if (!slug) {
-        setSelectedCategory(null);
+        setSelectedList(null);
         return;
       }
-      void resolveSlug(slug).then((cat) => setSelectedCategory(cat));
+      void resolveSlug(slug).then((entry) => setSelectedList(entry));
     };
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const selectCategory = (cat: CategoryListEntry) => {
-    setSelectedCategory(cat);
-    window.history.pushState(null, "", `/${cat.slug}`);
+  const selectList = (entry: ListEntry) => {
+    setSelectedList(entry);
+    window.history.pushState(null, "", `/${entry.slug}`);
   };
 
   const goBack = () => {
-    setSelectedCategory(null);
+    setSelectedList(null);
     window.history.pushState(null, "", "/");
   };
 
@@ -140,24 +136,22 @@ export default function App() {
         setFilterQuery={setFilterQuery}
         filterInputRef={filterInputRef}
       />
-      <div style={{ display: selectedCategory ? "none" : undefined }}>
-        <CategoriesList
-          onSelect={selectCategory}
+      <div style={{ display: selectedList ? "none" : undefined }}>
+        <Lists
+          onSelect={selectList}
           filterQuery={filterQuery}
           filterInputRef={filterInputRef}
-          visible={selectedCategory === null}
+          visible={selectedList === null}
         />
       </div>
-      {selectedCategory ? (
+      {selectedList ? (
         <TodoList
-          key={selectedCategory.slug}
-          category={selectedCategory}
+          key={selectedList.slug}
+          list={selectedList}
           filterQuery={filterQuery}
           onBack={goBack}
           onRenamed={({ name, slug }) => {
-            setSelectedCategory((prev) =>
-              prev ? { ...prev, name, slug } : null,
-            );
+            setSelectedList((prev) => (prev ? { ...prev, name, slug } : null));
             window.history.replaceState(null, "", `/${slug}`);
           }}
         />

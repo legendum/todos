@@ -2,7 +2,7 @@
 
 **Simple todo lists for AI tasks**
 
-Todos® (see https://todos.in/) is a mobile-first PWA and CLI for managing todo lists. Users create named categories, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
+Todos® (see https://todos.in/) is a mobile-first PWA and CLI for managing todo lists. Users create named lists, each with a unique webhook URL, and manage todos via the web UI, the `todos` CLI, or a simple HTTP API. The canonical format is `todos.md` — plain text, one todo per line, human-readable and agent-friendly. Login and billing are handled by Legendum.
 
 Self-hostable: the same codebase runs at todos.in and locally via `bun run start`. Without `LEGENDUM_API_KEY`, it skips auth and billing entirely.
 
@@ -13,8 +13,8 @@ Self-hostable: the same codebase runs at todos.in and locally via `bun run start
 - **Human and agent users**: Web UI for humans, webhook URLs for agents and scripts — no API keys required for webhooks.
 - **`todos` CLI**: Syncs a local `todos.md` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
 - **Real-time updates**: SSE stream broadcasts changes so the web UI updates live as agents work.
-- **Drag and drop**: Reorder categories and todos directly in the UI.
-- **Legendum billing**: Micro-charges accumulated via Legendum tabs — 2 credits per category, 0.1 per webhook write.
+- **Drag and drop**: Reorder lists and todos directly in the UI.
+- **Legendum billing**: Micro-charges accumulated via Legendum tabs — 2 credits per list, 0.1 per webhook write.
 - **Self-hostable**: MIT license. Single Bun binary + SQLite. No config file.
 
 ## Quick Start
@@ -61,7 +61,7 @@ todos               # list todos
 | `todos del <n>` / `todos delete <n>` | Delete todo at position `n` |
 | `todos first <n>...` | Move todos to the top (preserving order) |
 | `todos last <n>...` | Move todos to the bottom |
-| `todos open` | Open `todos.in/<category>` in the default browser |
+| `todos open` | Open `todos.in/<list>` in the default browser |
 | `todos skill` | Install the agent skill to `~/.claude/skills/todos/` and `~/.cursor/skills/todos/` |
 | `todos help` / `todos --help` | Show commands (no webhook required) |
 
@@ -84,7 +84,7 @@ Context: shipping by Friday
 - Lines starting with `[ ] ` or `[x] ` are todo lines. Everything else is free-form text, preserved as-is.
 - **Order = priority.** First todo line is most important.
 - **Position** is counted among todo lines only (skipping free-form text).
-- **Limits** (hosted mode): 10 KB per document, 200 todo lines per category.
+- **Limits** (hosted mode): 10 KB per document, 200 todo lines per list.
 
 ## Project Structure
 
@@ -104,7 +104,7 @@ todos/
   public/             # Static assets, logo, dist/
     todos.png
   config/
-    schema.sql        # SQLite schema (users, categories)
+    schema.sql        # SQLite schema (users, lists)
     SKILL.md          # Agent skill (copied by `todos skill`)
     nginx.conf
   docs/
@@ -118,7 +118,7 @@ todos/
 
 ## API
 
-All category routes support content negotiation: HTML (browsers), `text/markdown` / `.md` (todos.md format), `application/json` / `.json`.
+All list routes support content negotiation: HTML (browsers), `text/markdown` / `.md` (todos.md format), `application/json` / `.json`.
 
 ### Auth & Legendum
 
@@ -129,16 +129,16 @@ All category routes support content negotiation: HTML (browsers), `text/markdown
 | `POST /auth/logout` | Unset session cookie |
 | `/t/legendum/*` | Legendum middleware (link/unlink/billing widget) |
 
-### Categories & todos (authenticated — session cookie, or `Authorization: Bearer <account_token>` from link-key; not `lak_` on these routes)
+### Lists & todos (authenticated — session cookie, or `Authorization: Bearer <account_token>` from link-key; not `lak_` on these routes)
 
 | Route | Description |
 |-------|-------------|
-| `GET /` | List all categories (sorted by position) |
-| `POST /` | Create category (body: `name`) |
-| `GET /:category` | Get todos (`todos.md`) |
-| `PUT /:category` | Replace all todos (body: full `todos.md`) |
-| `POST /:category` | Same as `PUT` |
-| `DELETE /:category` | Delete category |
+| `GET /` | List all lists (sorted by position) |
+| `POST /` | Create list (body: `name`) |
+| `GET /:list` | Get todos (`todos.md`) |
+| `PUT /:list` | Replace all todos (body: full `todos.md`) |
+| `POST /:list` | Same as `PUT` |
+| `DELETE /:list` | Delete list |
 
 ### Public webhook (no auth)
 
@@ -156,7 +156,7 @@ Responses: `404` if not found, `402` if no Legendum account linked, `429` if cha
 Two tables only:
 
 - **users**: `id`, `email` (stable identity from Legendum), `legendum_token`, `created_at`.
-- **categories**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.md`), `created_at`, `updated_at`.
+- **lists**: `id`, `user_id`, `ulid` (webhook URL), `name`, `position`, `text` (raw `todos.md`), `created_at`, `updated_at`.
 
 The server stores `todos.md` verbatim in the `text` column — it doesn't parse items into rows.
 
@@ -168,10 +168,10 @@ All billing goes through **Legendum tabs** — no local quota tracking.
 
 | Action | Cost |
 |--------|------|
-| Category creation | 2 credits |
+| List creation | 2 credits |
 | Webhook write (`PUT`/`POST /w/:ulid`) | 0.1 credits |
 | Reads (any `GET`) | Free |
-| Authenticated writes (`PUT`/`POST /:category`) | Free |
+| Authenticated writes (`PUT`/`POST /:list`) | Free |
 
 Micro-charges accumulate to a **2-credit tab threshold** before settling as a single Legendum charge.
 
@@ -211,7 +211,7 @@ Without `LEGENDUM_API_KEY`, the server runs in **self-hosted mode**: no login, n
 
 ### Backup
 
-All category data lives in a single SQLite file (`TODOS_DB_PATH`, default `data/todos.db`). To back up: stop the server and copy that file. To restore: replace the file and start again.
+All list data lives in a single SQLite file (`TODOS_DB_PATH`, default `data/todos.db`). To back up: stop the server and copy that file. To restore: replace the file and start again.
 
 ### Environment template
 

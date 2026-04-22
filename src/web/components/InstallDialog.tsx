@@ -74,8 +74,8 @@ export default function InstallDialog({ onClose }: Props) {
           <section className="dialog-section">
             <h3>2. Add your webhook to a project</h3>
             <p>
-              Each category has a webhook URL (tap the URL under the category
-              name to copy it). Add it to your project's <code>.env</code>:
+              Each list has a webhook URL (tap the URL under the list name to
+              copy it). Add it to your project's <code>.env</code>:
             </p>
             <pre className="dialog-code">
               TODOS_WEBHOOK=https://todos.in/w/01ABC123DEF456GHI789

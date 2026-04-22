@@ -20,7 +20,7 @@ export function getAuthUserId(req: Request): number | null {
  *
  * **Legendum account keys (`lak_…`) are not accepted here** — clients must call
  * `POST …/link-key` with `Authorization: Bearer <lak_…>` to obtain an `account_token`, then
- * use that token on category/API routes (or rely on the session cookie set by link-key).
+ * use that token on list/API routes (or rely on the session cookie set by link-key).
  */
 export async function getAuthUserIdWithBearer(
   req: Request,

@@ -111,7 +111,7 @@ export default function TopBar({
         </button>
         <label
           className="list-filter topbar-search-filter"
-          htmlFor="todos-category-list-filter"
+          htmlFor="todos-list-filter"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="list-filter-icon" aria-hidden>
@@ -133,7 +133,7 @@ export default function TopBar({
           </span>
           <input
             ref={filterInputRef}
-            id="todos-category-list-filter"
+            id="todos-list-filter"
             type="search"
             className="list-filter-input"
             placeholder="Filter..."

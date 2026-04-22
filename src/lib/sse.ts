@@ -1,4 +1,4 @@
-/** Simple SSE broadcaster keyed by category ULID. */
+/** Simple SSE broadcaster keyed by list ULID. */
 
 type Listener = (text: string) => void;
 

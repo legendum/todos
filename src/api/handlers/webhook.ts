@@ -5,7 +5,7 @@ import { broadcast, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
 
-type CategoryRow = {
+type ListRow = {
   id: number;
   user_id: number;
   ulid: string;
@@ -15,13 +15,13 @@ type CategoryRow = {
   updated_at: number;
 };
 
-function findByUlid(ulid: string): CategoryRow | undefined {
+function findByUlid(ulid: string): ListRow | undefined {
   const db = getDb();
   return db
     .query(
-      "SELECT id, user_id, ulid, name, slug, text, updated_at FROM categories WHERE ulid = ?",
+      "SELECT id, user_id, ulid, name, slug, text, updated_at FROM lists WHERE ulid = ?",
     )
-    .get(ulid) as CategoryRow | undefined;
+    .get(ulid) as ListRow | undefined;
 }
 
 /** GET /w/:ulid — get todos */
@@ -34,8 +34,8 @@ export function getWebhookTodos(ulid: string): Response {
       "Content-Type": "text/markdown; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "X-Updated-At": String(row.updated_at),
-      "X-Category-Slug": row.slug,
-      "X-Category-Name": row.name,
+      "X-List-Slug": row.slug,
+      "X-List-Name": row.name,
     },
   });
 }
@@ -61,7 +61,7 @@ export async function replaceWebhookTodos(
   const now = Math.floor(Date.now() / 1000);
   const db = getDb();
   db.run(
-    "UPDATE categories SET text = ?, updated_at = ? WHERE id = ?",
+    "UPDATE lists SET text = ?, updated_at = ? WHERE id = ?",
     text,
     now,
     row.id,

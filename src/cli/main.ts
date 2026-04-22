@@ -139,14 +139,14 @@ Usage:
   todos first <n> [...]    move position(s) to the top
   todos last <n> [...]     move position(s) to the bottom
   todos purge              remove all done items
-  todos open               open this category in the browser
+  todos open               open this list in the browser
   todos skill              install agent skill for Claude Code / Cursor
   todos help               show this message
 
 First run: set TODOS_WEBHOOK in .env or you will be prompted.
 
 Webhook URL: open https://todos.in, choose a todo list, then tap or click the
-/w/… line under the category name at the top — it copies the webhook to your
+/w/… line under the list name at the top — it copies the webhook to your
 clipboard. Paste that into TODOS_WEBHOOK in your project .env.
 `);
 }
@@ -184,14 +184,14 @@ async function main() {
   // Fetch server content
   let serverContent = "";
   let serverUpdatedAt = 0;
-  let categorySlug: string | null = null;
+  let listSlug: string | null = null;
   let online = true;
   try {
     const res = await fetch(webhookUrl, { method: "GET" });
     if (res.ok) {
       serverContent = await res.text();
       serverUpdatedAt = Number(res.headers.get("X-Updated-At") || "0");
-      categorySlug = res.headers.get("X-Category-Slug");
+      listSlug = res.headers.get("X-List-Slug");
     } else {
       online = false;
     }
@@ -277,7 +277,7 @@ async function main() {
     return;
   } else if (command === "open" && args.length === 1) {
     const origin = new URL(webhookUrl).origin;
-    const slug = categorySlug?.trim();
+    const slug = listSlug?.trim();
     const pageUrl =
       slug && slug.length > 0
         ? `${origin}/${encodeURIComponent(slug)}`

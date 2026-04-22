@@ -1,7 +1,7 @@
-import type { CategoryListEntry } from "./offlineDb";
+import type { ListEntry } from "./offlineDb";
 
 /** Response body from `GET /:slug.json`. */
-export type TodoCategoryJson = {
+export type TodoListJson = {
   name: string;
   slug: string;
   ulid: string;
@@ -11,9 +11,7 @@ export type TodoCategoryJson = {
 };
 
 /** Map into list row shape (position comes from list API when available). */
-export function categoryFromTodoJson(
-  data: TodoCategoryJson,
-): CategoryListEntry {
+export function listFromTodoJson(data: TodoListJson): ListEntry {
   return {
     name: data.name,
     slug: data.slug,

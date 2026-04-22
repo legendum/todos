@@ -23,12 +23,12 @@ import {
   serializeContent,
 } from "../../lib/todos";
 import {
-  type CategoryListEntry,
   deleteMarkdown,
   getMarkdown,
+  type ListEntry,
   saveMarkdown,
 } from "../offlineDb";
-import { patchCategoryName } from "../patchCategoryName";
+import { patchListName } from "../patchListName";
 import CopyIcon from "./CopyIcon";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
@@ -49,8 +49,8 @@ type Line =
   | { id: string; isTodo: false; text: string };
 
 /**
- * In-memory cache of the last-seen markdown per category, keyed by slug.
- * Used to prime `lines` synchronously when the user re-opens a category
+ * In-memory cache of the last-seen markdown per list, keyed by slug.
+ * Used to prime `lines` synchronously when the user re-opens a list
  * they've already visited this session, so the rows area doesn't flash
  * blank while IndexedDB and the network fetch resolve.
  */
@@ -93,20 +93,20 @@ function serializeLines(lines: Line[]): string {
 }
 
 type Props = {
-  category: CategoryListEntry;
+  list: ListEntry;
   filterQuery: string;
   onBack: () => void;
   onRenamed: (updated: { name: string; slug: string }) => void;
 };
 
 export default function TodoList({
-  category,
+  list,
   filterQuery,
   onBack,
   onRenamed,
 }: Props) {
   const [lines, setLines] = useState<Line[]>(() =>
-    parseLines(markdownMemCache.get(category.slug) ?? ""),
+    parseLines(markdownMemCache.get(list.slug) ?? ""),
   );
   const [newTodo, setNewTodo] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -114,7 +114,7 @@ export default function TodoList({
   const [copied, setCopied] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
-  const [editName, setEditName] = useState(category.name);
+  const [editName, setEditName] = useState(list.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const addBarRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
@@ -142,35 +142,35 @@ export default function TodoList({
   }, [lines, filterActive, filterTrim]);
 
   useEffect(() => {
-    if (!editingName) setEditName(category.name);
-  }, [category.name, category.slug, editingName]);
+    if (!editingName) setEditName(list.name);
+  }, [list.name, list.slug, editingName]);
 
-  // On first non-empty render of a newly-opened category, jump to the bottom
+  // On first non-empty render of a newly-opened list, jump to the bottom
   // so the freshest todos are in view. Guarded by slug so edits within the
   // same list don't re-snap and lose the user's scroll position.
   useEffect(() => {
-    if (initialScrollSlugRef.current === category.slug) return;
+    if (initialScrollSlugRef.current === list.slug) return;
     if (lines.length === 0) return;
-    initialScrollSlugRef.current = category.slug;
+    initialScrollSlugRef.current = list.slug;
     requestAnimationFrame(() => {
       const el = listScrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     });
-  }, [category.slug, lines.length]);
+  }, [list.slug, lines.length]);
 
-  // Update page title with category name and counts
+  // Update page title with list name and counts
   useEffect(() => {
     const todos = lines.filter((l) => l.isTodo);
     const done = todos.filter((l) => l.done).length;
     const total = todos.length;
     document.title =
       total > 0
-        ? `${category.name} (${done}/${total}) — Todos`
-        : `${category.name} — Todos`;
+        ? `${list.name} (${done}/${total}) — Todos`
+        : `${list.name} — Todos`;
     return () => {
       document.title = "Todos";
     };
-  }, [category.name, lines]);
+  }, [list.name, lines]);
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -210,7 +210,7 @@ export default function TodoList({
   useEffect(() => {
     let cancelled = false;
     let networkLoaded = false;
-    const slug = category.slug;
+    const slug = list.slug;
 
     void (async () => {
       const cached = await getMarkdown(slug);
@@ -239,43 +239,43 @@ export default function TodoList({
     return () => {
       cancelled = true;
     };
-  }, [category.slug]);
+  }, [list.slug]);
 
   // Live updates when online
   useEffect(() => {
     if (!online) return;
-    const es = new EventSource(`/w/${category.ulid}/events`);
+    const es = new EventSource(`/w/${list.ulid}/events`);
     es.addEventListener("update", (e) => {
       const text = (e as MessageEvent<string>).data;
       void (async () => {
-        const prev = await getMarkdown(category.slug);
+        const prev = await getMarkdown(list.slug);
         const t = Math.floor(Date.now() / 1000);
         await saveMarkdown({
-          slug: category.slug,
+          slug: list.slug,
           text,
           updatedAt: Math.max(prev?.updatedAt ?? 0, t),
           pending: false,
         });
-        markdownMemCache.set(category.slug, text);
+        markdownMemCache.set(list.slug, text);
         setLines(parseLines(text));
       })();
     });
     return () => es.close();
-  }, [category.slug, category.ulid, online]);
+  }, [list.slug, list.ulid, online]);
 
   useEffect(() => {
     const onSync = () => {
       void (async () => {
-        const row = await getMarkdown(category.slug);
+        const row = await getMarkdown(list.slug);
         if (row) {
-          markdownMemCache.set(category.slug, row.text);
+          markdownMemCache.set(list.slug, row.text);
           setLines(parseLines(row.text));
         }
       })();
     };
     window.addEventListener("todos-offline-sync", onSync);
     return () => window.removeEventListener("todos-offline-sync", onSync);
-  }, [category.slug]);
+  }, [list.slug]);
 
   /** Push current lines to server, debounced. */
   const pushToServer = useCallback(
@@ -284,15 +284,15 @@ export default function TodoList({
       pushTimeoutRef.current = setTimeout(() => {
         void (async () => {
           const text = serializeLines(updatedLines);
-          const prev = await getMarkdown(category.slug);
+          const prev = await getMarkdown(list.slug);
           await saveMarkdown({
-            slug: category.slug,
+            slug: list.slug,
             text,
             updatedAt: prev?.updatedAt ?? 0,
             pending: true,
           });
           try {
-            const res = await fetch(`/${category.slug}`, {
+            const res = await fetch(`/${list.slug}`, {
               method: "PUT",
               credentials: "include",
               headers: { "Content-Type": "text/markdown" },
@@ -301,7 +301,7 @@ export default function TodoList({
             if (res.ok) {
               const j = (await res.json()) as { updated_at: number };
               await saveMarkdown({
-                slug: category.slug,
+                slug: list.slug,
                 text,
                 updatedAt: j.updated_at,
                 pending: false,
@@ -313,7 +313,7 @@ export default function TodoList({
         })();
       }, 300);
     },
-    [category.slug],
+    [list.slug],
   );
 
   const updateLines = useCallback(
@@ -329,7 +329,7 @@ export default function TodoList({
 
   const shareMarkdown = useCallback(async () => {
     const text = serializeLines(lines);
-    const safeSlug = category.slug.replace(/[^\w.-]+/g, "_") || "todos";
+    const safeSlug = list.slug.replace(/[^\w.-]+/g, "_") || "todos";
     const filename = `${safeSlug}.md`;
     const file = new File([text], filename, { type: "text/markdown" });
 
@@ -338,7 +338,7 @@ export default function TodoList({
 
     if (navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: category.name });
+        await navigator.share({ files: [file], title: list.name });
         return;
       } catch (e) {
         if (userCancelledShare(e)) return;
@@ -348,7 +348,7 @@ export default function TodoList({
     if (typeof navigator.share === "function") {
       try {
         await navigator.share({
-          title: `${category.name} — todos`,
+          title: `${list.name} — todos`,
           text,
         });
         return;
@@ -368,7 +368,7 @@ export default function TodoList({
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2500);
-  }, [lines, category.name, category.slug]);
+  }, [lines, list.name, list.slug]);
 
   const toggleDone = (index: number) => {
     updateLines((prev) =>
@@ -431,19 +431,19 @@ export default function TodoList({
 
   const copyWebhookUrl = () => {
     const origin = window.location.origin;
-    navigator.clipboard.writeText(`${origin}/w/${category.ulid}`);
+    navigator.clipboard.writeText(`${origin}/w/${list.ulid}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const startEditingName = () => {
-    setEditName(category.name);
+    setEditName(list.name);
     setEditingName(true);
   };
 
   const saveName = async () => {
     const trimmed = editName.trim();
-    if (!trimmed || trimmed === category.name) {
+    if (!trimmed || trimmed === list.name) {
       setEditingName(false);
       return;
     }
@@ -451,8 +451,8 @@ export default function TodoList({
       cancelEditName();
       return;
     }
-    const oldSlug = category.slug;
-    const data = await patchCategoryName(oldSlug, trimmed);
+    const oldSlug = list.slug;
+    const data = await patchListName(oldSlug, trimmed);
     if (data) {
       if (data.slug !== oldSlug) {
         const row = await getMarkdown(oldSlug);
@@ -542,11 +542,11 @@ export default function TodoList({
           ) : (
             <h2
               className="screen-title"
-              title="Click to rename category"
+              title="Click to rename list"
               onClick={startEditingName}
               style={{ cursor: "pointer" }}
             >
-              {category.name}
+              {list.name}
             </h2>
           )}
           <div
@@ -554,7 +554,7 @@ export default function TodoList({
             title={copied ? "Copied to clipboard" : "Click to copy webhook URL"}
             onClick={copyWebhookUrl}
           >
-            /w/{category.ulid}
+            /w/{list.ulid}
             {copied ? (
               <span className="copied-badge">Copied!</span>
             ) : (

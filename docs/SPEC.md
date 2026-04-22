@@ -1,13 +1,13 @@
 # Todos — Product Spec
 
-A minimal PWA: **create categories → manage todo lists via web UI, CLI, or webhook**. Hosted at **todos.in**. Designed for both human and agent users.
+A minimal PWA: **create lists → manage todos via web UI, CLI, or webhook**. Hosted at **todos.in**. Designed for both human and agent users.
 
 ---
 
 ## 1. What it does
 
 - **User signs up** via Login with Legendum (email-only OAuth).
-- **User creates categories** — each category is a named todo list with a unique webhook URL.
+- **User creates lists** — each list is a named todo list with a unique webhook URL.
 - **User manages todos** — via the web UI, the `todos` CLI, or the webhook API.
 - **The canonical format is `todos.md`** — a plain text file, one todo per line, human-readable and agent-friendly.
 
@@ -34,12 +34,12 @@ The server stores todos in SQLite but every API surface speaks this format. The 
 
 No passwords. The user's **email** (from Legendum) is the stable identity — it uniquely identifies the user across devices and re-links. The `legendum_token` is a billing token that may change on re-link; it is updated on every login but never used for identity.
 
-### 2.2 Categories
+### 2.2 Lists
 
-1. **Dashboard** (after login): List of categories. "Create category" → user enters a name → we generate a unique ULID for the webhook URL.
-2. **Web URL**: `todos.in/<name>` — authenticated, session-based. The category name is the route, scoped to the logged-in user. Names must be unique per user. Reserved names: `t`, `w` (rejected on category create).
+1. **Dashboard** (after login): List of lists. "Create list" → user enters a name → we generate a unique ULID for the webhook URL.
+2. **Web URL**: `todos.in/<name>` — authenticated, session-based. The list name is the route, scoped to the logged-in user. Names must be unique per user. Reserved names: `t`, `w` (rejected on list create).
 3. **Webhook URL**: `todos.in/w/<ulid>` — public, no auth. For agents and scripts.
-4. **Each category** contains an ordered list of todo items.
+4. **Each list** contains an ordered set of todo items.
 
 ### 2.3 Todos
 
@@ -73,12 +73,12 @@ Rules:
 
 Limits:
 - **Max document size**: 10 KB.
-- **Max todo lines**: 200 per category.
+- **Max todo lines**: 200 per list.
 
 ### 2.5 Drag and drop
 
-- **Todos** can be dragged up/down within a category to reorder. Updates position on drop.
-- **Categories** can be dragged up/down on the main screen to reorder. Updates position on drop.
+- **Todos** can be dragged up/down within a list to reorder. Updates position on drop.
+- **Lists** can be dragged up/down on the main screen to reorder. Updates position on drop.
 - Same drag-and-drop pattern as chats in ../chats2me.
 
 ### 2.6 CLI: `todos` command
@@ -97,7 +97,7 @@ A lightweight CLI that does two things: (1) syncs `todos.md` with the server, an
    - `todos first 4 6` — move todos at lines 4 and 6 to the top (lines 1 and 2, preserving order)
    - `todos last 2 5` — move todos at lines 2 and 5 to the bottom (2 before 5)
    - `todos purge` — remove every done (`[x]`) todo; free-form text is preserved
-   - `todos open` — open `todos.in/<category>` in the default browser
+   - `todos open` — open `todos.in/<list>` in the default browser
    - `todos Buy milk` — any text that doesn't match a command is added as a new todo at the end
 4. **Output** is the `todos.md` format, numbered:
    ```
@@ -132,13 +132,13 @@ A skill file (e.g. `config/SKILL.md` installed to `~/.claude/skills/todos/SKILL.
 
 ### 2.9 Tool integration (chats2me)
 
-External tools like chats2me obtain a per-service **`account_token`** via **`POST /t/legendum/link-key`** with **`Authorization: Bearer <lak_…>`**, store it, then call category routes with **`Authorization: Bearer <account_token>`** — not `lak_` on those URLs. The API uses clean category-name routes matching the `todos.in/<name>` pattern:
+External tools like chats2me obtain a per-service **`account_token`** via **`POST /t/legendum/link-key`** with **`Authorization: Bearer <lak_…>`**, store it, then call list routes with **`Authorization: Bearer <account_token>`** — not `lak_` on those URLs. The API uses clean list-name routes matching the `todos.in/<name>` pattern:
 
-- `GET /` — list all categories
-- `GET /:category` — get todos (returns `todos.md` format, or JSON via content negotiation)
-- `PUT /:category` — replace all todos (body is full `todos.md` content)
-- `POST /:category` — same as PUT (replace all)
-- `DELETE /:category` — delete the category
+- `GET /` — list all lists
+- `GET /:list` — get todos (returns `todos.md` format, or JSON via content negotiation)
+- `PUT /:list` — replace all todos (body is full `todos.md` content)
+- `POST /:list` — same as PUT (replace all)
+- `DELETE /:list` — delete the list
 
 Responses support `.json`, `.md` extensions for format selection. See `docs/todos.yaml` for the chats2me tool manifest.
 
@@ -146,10 +146,10 @@ Responses support `.json`, `.md` extensions for format selection. See `docs/todo
 
 ## 3. Data we store (minimal)
 
-**Hierarchy:** A user has categories; a category has todos.
+**Hierarchy:** A user has lists; a list has todos.
 
 - **users**: `id` (PK), `email` (UNIQUE, NOT NULL — stable identity from Legendum; `local@localhost` for self-hosted), `legendum_token` (account-service token for billing — updated on each login), `created_at`.
-- **categories**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.md` content), `created_at`.
+- **lists**: `id` (PK, INTEGER auto-increment), `user_id` (FK), `ulid` (UNIQUE, for webhook URL `/w/:ulid`), `name`, `position` (INTEGER, for user-defined ordering), `text` (TEXT, the raw `todos.md` content), `created_at`.
 
 That's it. Two tables. The `text` column stores the canonical `todos.md` content — the server doesn't parse it into rows.
 
@@ -206,10 +206,10 @@ tsconfig.json
 ### Backend responsibilities
 
 - Legendum OAuth login flow via Legendum SDK and middleware.
-- Categories: create, list, delete. Store `todos.md` content as a text column.
+- Lists: create, list, delete. Store `todos.md` content as a text column.
 - Serve and accept `todos.md` format — via authenticated routes and public webhook.
 - Public webhook: `GET/POST/PUT /w/:ulid` — read/append/replace todos (no auth).
-- Billing via Legendum tabs: category creation and webhook writes charged via tabs.
+- Billing via Legendum tabs: list creation and webhook writes charged via tabs.
 - Legendum link/unlink via Legendum middleware.
 
 ---
@@ -220,10 +220,10 @@ All billing goes through **Legendum tabs** — no local quota tracking.
 
 ### Costs
 
-- **Category creation**: 2 credits.
+- **List creation**: 2 credits.
 - **Webhook write** (PUT/POST on `/w/:ulid`): 0.1 credits.
 - **Reads** (GET on any endpoint): free.
-- **Authenticated writes** (PUT/POST on `/:category`): free (user is already paying for Legendum).
+- **Authenticated writes** (PUT/POST on `/:list`): free (user is already paying for Legendum).
 
 ### Tabs
 
@@ -234,8 +234,8 @@ Legendum tabs allow micro-charges to accumulate until a threshold is reached, th
 
 ### Flow
 
-1. User must have `legendum_token` linked to create categories or write via webhook.
-2. On category create: add 2 credits to the user's tab.
+1. User must have `legendum_token` linked to create lists or write via webhook.
+2. On list create: add 2 credits to the user's tab.
 3. On webhook write: add 0.1 credits to the user's tab.
 4. If the user has no linked Legendum account: return 402 (payment required).
 5. If the Legendum charge fails: return 429.
@@ -248,7 +248,7 @@ When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no l
 
 ## 6. API (REST)
 
-**Auth**: All authenticated endpoints accept **cookie** (browser; encrypted) or **Authorization: Bearer \<account_token\>** (opaque token from **`POST …/link-key`**, stored server-side as `legendum_token`). **`lak_`** is only for the link-key exchange, not for category CRUD.
+**Auth**: All authenticated endpoints accept **cookie** (browser; encrypted) or **Authorization: Bearer \<account_token\>** (opaque token from **`POST …/link-key`**, stored server-side as `legendum_token`). **`lak_`** is only for the link-key exchange, not for list CRUD.
 
 ### Auth & Legendum
 
@@ -259,7 +259,7 @@ When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no l
 
 ### Content negotiation
 
-All category routes support multiple response formats:
+All list routes support multiple response formats:
 
 - **HTML** — default for browsers (`Accept: text/html` or no extension). Returns the full PWA page.
 - **Text** — `Accept: text/markdown` or `.md` extension (e.g. `GET /shopping.md`). Returns `todos.md` format.
@@ -277,21 +277,21 @@ The `reason` field says what was missing (same `error` code, finer detail for cl
 
 | `reason` | When |
 |----------|------|
-| `category` | Unknown category **slug** on `/:category` routes (including `GET`/`PUT`/`POST`/`PATCH`/`DELETE`, and format suffixes such as `.md` / `.json`). |
+| `list` | Unknown list **slug** on `/:list` routes (including `GET`/`PUT`/`POST`/`PATCH`/`DELETE`, and format suffixes such as `.md` / `.json`). |
 | `route` | No matching API route in **hosted** mode (unknown path after auth). |
 | `ulid` | Unknown **webhook id** on `/w/:ulid` (`GET`/`PUT`/`POST` todos, or `GET /w/:ulid/events` for SSE). |
 | `user` | User row missing (e.g. `GET /t/settings/me` — abnormal; self-hosted always has a local user). |
 
 Other status codes: **400** often uses `{ "error": "invalid_request", "message": "…" }`. **402** / **429** from billing are described in §5.
 
-### Categories & todos (auth)
+### Lists & todos (auth)
 
-- `GET /` — list all categories. Sorted by `position`.
-- `POST /` — create category. Body: `name` (required). Returns category with webhook URL.
-- `GET /:category` — get todos in category. Returns `todos.md` format (or other format via content negotiation).
-- `PUT /:category` — replace all todos. Body: full `todos.md` content. The server stores it verbatim.
-- `POST /:category` — same as PUT (replace all). Both accept the full document.
-- `DELETE /:category` — delete category and all its todos.
+- `GET /` — list all lists. Sorted by `position`.
+- `POST /` — create list. Body: `name` (required). Returns list with webhook URL.
+- `GET /:list` — get todos in list. Returns `todos.md` format (or other format via content negotiation).
+- `PUT /:list` — replace all todos. Body: full `todos.md` content. The server stores it verbatim.
+- `POST /:list` — same as PUT (replace all). Both accept the full document.
+- `DELETE /:list` — delete list and all its todos.
 
 ### Settings
 
@@ -300,10 +300,10 @@ Other status codes: **400** often uses `{ "error": "invalid_request", "message":
 ### Public webhook (no auth, no API key)
 
 The webhook URL is the only credential needed. No API keys, no bearer tokens. This is intentional:
-- Multiple agents may need access to the same category
-- Accidental exposure is low-risk (scoped to one category of todos)
+- Multiple agents may need access to the same list
+- Accidental exposure is low-risk (scoped to one list of todos)
 - Every project already has a `.env` — just add `TODOS_WEBHOOK`
-- Webhooks are simple and category-scoped by design
+- Webhooks are simple and list-scoped by design
 
 Endpoints:
 
@@ -315,7 +315,7 @@ Shared responses: **404** if the ULID is not found (`reason: ulid` — see **Err
 
 ### Server-Sent Events (SSE)
 
-- `GET /w/:ulid/events` — SSE stream for a category (no auth, same access as webhook). The web UI uses this too (it knows the ULID from the category).
+- `GET /w/:ulid/events` — SSE stream for a list (no auth, same access as webhook). The web UI uses this too (it knows the ULID from the list).
 
 When todos change via any source (web UI, webhook, CLI), the server broadcasts the updated `todos.md` to all connected SSE clients.
 
@@ -335,7 +335,7 @@ This lets the web UI update in real time as agents work on todos via the webhook
 ## 7. Security / privacy
 
 - **Auth cookie**: Encrypted with HMAC-SHA256 server secret. Client cannot read or forge it.
-- **No API keys**: Webhook URLs are the sole access mechanism for external/agent usage. The ULID is unguessable (Crockford base32, 26 chars) and each URL is scoped to a single category.
+- **No API keys**: Webhook URLs are the sole access mechanism for external/agent usage. The ULID is unguessable (Crockford base32, 26 chars) and each URL is scoped to a single list.
 - **CORS**: Open to `*` — webhook endpoints are intentionally public.
 - **HTTPS only** in production.
 
@@ -364,24 +364,24 @@ No config file required. All configuration via environment variables:
 
 **Look and feel**: Optimized for **vertical screen**, **cellphone-sized** (portrait, thumb-friendly). Primary use as a **PWA** (add to home screen). Desktop/tablet is secondary.
 
-### 9.1 Categories list (main screen)
+### 9.1 Lists (main screen)
 
 - **Top bar**: Left = app logo; right = Settings icon.
-- **Body**: List of categories, ordered by user-defined **position** (drag to reorder). Each row shows category **name** and todo **count** (e.g. "3/7" = 3 done of 7).
-- **"+"** button to create a new category.
-- **Swipe left** on a category row reveals **Delete**.
-- **Drag** a category up/down to reorder (updates `position`).
-- **Tap** a category → navigate to its **todo list**.
+- **Body**: List of lists, ordered by user-defined **position** (drag to reorder). Each row shows list **name** and todo **count** (e.g. "3/7" = 3 done of 7).
+- **"+"** button to create a new list.
+- **Swipe left** on a list row reveals **Delete**.
+- **Drag** a list up/down to reorder (updates `position`).
+- **Tap** a list → navigate to its **todo list**.
 
-### 9.2 Todo list (per category)
+### 9.2 Todo list (per list)
 
-- **Back arrow** returns to categories list.
-- **Category name** as header, with webhook URL copy button.
+- **Back arrow** returns to the lists screen.
+- **List name** as header, with webhook URL copy button.
 - **List of todos**: checkbox (done/undone), todo text. Ordered by `position`.
 - **"+"** to add a new todo (inline input at bottom).
 - **Swipe left** on a todo reveals **Delete**.
 - **Tap** a todo to edit its text.
-- **Drag** a todo up/down to reorder within the category (updates `position`).
+- **Drag** a todo up/down to reorder within the list (updates `position`).
 
 ### 9.3 Settings
 
@@ -410,7 +410,7 @@ No cron jobs needed — billing is handled by Legendum tabs.
 ## 12. Out of scope for v1
 
 - Push notifications (use Alert service if needed).
-- Teams or shared categories with multiple owners.
+- Teams or shared lists with multiple owners.
 - Native mobile apps (PWA only).
 - WebSockets (SSE is sufficient).
 - Auth on webhook URLs (beyond URL obscurity).
@@ -423,23 +423,23 @@ No cron jobs needed — billing is handled by Legendum tabs.
 - **Alert integration**: Optionally notify via Alert service when todos are added/completed.
 - **Native mobile apps**: Android and iOS via app stores.
 - **Payment**: Adjustable pricing tiers via Legendum.
-- **Sharing**: Share a category (read-only or read-write) with other users.
+- **Sharing**: Share a list (read-only or read-write) with other users.
 - **Recurring todos**: Todos that reset on a schedule.
 
 ---
 
 ## Checklist (implementation)
 
-- [x] **DB**: Create `data/todos.db` from config/schema.sql (users, categories). Two tables only.
+- [x] **DB**: Create `data/todos.db` from config/schema.sql (users, lists). Two tables only.
 - [x] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
-- [x] **Categories & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:category`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.md` stored as text column on categories.
+- [x] **Lists & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:list`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.md` stored as text column on lists.
 - [x] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.md` format; PUT and POST identical; quota on writes.
 - [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.md` on any change.
-- [x] **Billing**: Legendum tabs — 2 credits per category create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
+- [x] **Billing**: Legendum tabs — 2 credits per list create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
 - [x] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
-- [x] **Frontend — layout**: Top bar (logo + install dialog); categories list ordered by position; mobile-first portrait PWA.
-- [x] **Frontend — screens**: Login; Categories list; Todo list per category; Install dialog.
-- [x] **Frontend — drag & drop**: Drag to reorder categories on main screen; drag to reorder todos within a category.
+- [x] **Frontend — layout**: Top bar (logo + install dialog); lists ordered by position; mobile-first portrait PWA.
+- [x] **Frontend — screens**: Login; Lists; Todo list per list; Install dialog.
+- [x] **Frontend — drag & drop**: Drag to reorder lists on main screen; drag to reorder todos within a list.
 - [x] **PWA**: workbox-build `generateSW()`; version-based cacheId; content-hashed bundles; clean dist on build.
 - [x] **CLI**: `todos` — reads `TODOS_WEBHOOK` from `.env`; list (default)/done/undo/del/first/last/open/skill commands; position-based; bare text adds a todo. Syncs local `todos.md`.
 - [x] **Agent skill**: `todos skill` copies `config/SKILL.md` to `~/.claude/skills/todos/SKILL.md` and `~/.cursor/skills/todos/SKILL.md`.
