@@ -334,11 +334,10 @@ export default {
       return await serveIndex();
     }
 
-    // --- Authenticated mode ---
-    // SPA routes that should serve index.html (before auth check, for browser navigation)
+    const accept = req.headers.get("Accept") ?? "";
     const isPageNavigation =
       method === "GET" &&
-      (req.headers.get("Accept") ?? "").includes("text/html") &&
+      !accept.includes("application/json") &&
       !path.startsWith("/t/") &&
       !path.startsWith("/w/") &&
       !path.startsWith("/dist/") &&
