@@ -1,7 +1,12 @@
 import { chargeListCreate } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import { isSelfHosted } from "../../lib/mode.js";
-import { broadcast } from "../../lib/sse.js";
+import {
+  broadcast,
+  broadcastUser,
+  SSE_HEARTBEAT_MS,
+  subscribeUser,
+} from "../../lib/sse.js";
 import {
   countTodos,
   toSlug,
@@ -23,8 +28,20 @@ type ListRow = {
   updated_at: number;
 };
 
-/** GET / — list all lists */
-export function indexLists(userId: number): Response {
+export type ListsIndexPayload = {
+  lists: Array<{
+    name: string;
+    slug: string;
+    ulid: string;
+    position: number;
+    total: number;
+    done: number;
+    updated_at: number;
+  }>;
+};
+
+/** Same shape as `GET /` JSON — used by index, SSE, and push notifications to clients. */
+export function getListsPayload(userId: number): ListsIndexPayload {
   const db = getDb();
   const rows = db
     .query(
@@ -46,7 +63,104 @@ export function indexLists(userId: number): Response {
     };
   });
 
-  return json({ lists });
+  return { lists };
+}
+
+/** GET / — list all lists */
+export function indexLists(userId: number): Response {
+  return json(getListsPayload(userId));
+}
+
+/** Broadcast updated list summaries to all SSE clients for this user (e.g. after webhook/CLI write). */
+export function notifyListsChanged(userId: number): void {
+  broadcastUser(userId, JSON.stringify(getListsPayload(userId)));
+}
+
+function formatListsSSE(listsJsonLine: string): string {
+  return `event: lists\ndata: ${listsJsonLine}\n\n`;
+}
+
+/** GET /t/lists/events — authenticated SSE: `lists` events with same JSON as GET /. */
+export function sseListsStream(userId: number, signal?: AbortSignal): Response {
+  let unsubscribe: (() => void) | undefined;
+  let onAbort: (() => void) | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+
+      const close = () => {
+        if (heartbeat !== undefined) {
+          clearInterval(heartbeat);
+          heartbeat = undefined;
+        }
+        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        unsubscribe?.();
+        unsubscribe = undefined;
+        onAbort = undefined;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      };
+
+      unsubscribe = subscribeUser(userId, (listsJsonLine) => {
+        try {
+          controller.enqueue(encoder.encode(formatListsSSE(listsJsonLine)));
+        } catch {
+          close();
+        }
+      });
+
+      try {
+        controller.enqueue(
+          encoder.encode(
+            formatListsSSE(JSON.stringify(getListsPayload(userId))),
+          ),
+        );
+      } catch {
+        close();
+        return;
+      }
+
+      heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode("\n: keep-alive\n\n"));
+        } catch {
+          close();
+        }
+      }, SSE_HEARTBEAT_MS);
+
+      if (signal) {
+        if (signal.aborted) {
+          close();
+          return;
+        }
+        onAbort = () => close();
+        signal.addEventListener("abort", onAbort);
+      }
+    },
+    cancel() {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+      unsubscribe?.();
+      unsubscribe = undefined;
+      onAbort = undefined;
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
 
 /** POST / — create list */
@@ -103,6 +217,8 @@ export async function createList(
     slug,
     maxPos.max_pos + 1,
   );
+
+  notifyListsChanged(userId);
 
   return json(
     {
@@ -238,6 +354,7 @@ export async function replaceTodos(
     row.id,
   );
   broadcast(row.ulid, text);
+  notifyListsChanged(userId);
 
   const { total, done } = countTodos(text);
   return json({
@@ -262,6 +379,7 @@ export function deleteList(listSlug: string, userId: number): Response {
 
   if (result.changes === 0)
     return json({ error: "not_found", reason: "list" }, 404);
+  notifyListsChanged(userId);
   return json({ ok: true });
 }
 
@@ -315,6 +433,7 @@ export async function renameList(
     row.id,
   );
 
+  notifyListsChanged(userId);
   return json({ name, slug: newSlug, old_slug: listSlug });
 }
 
@@ -349,5 +468,6 @@ export async function reorderLists(
     stmt.run(i, userId, body.order[i]);
   }
 
+  notifyListsChanged(userId);
   return json({ ok: true });
 }

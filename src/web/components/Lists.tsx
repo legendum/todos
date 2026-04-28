@@ -98,6 +98,38 @@ export default function Lists({
     return () => window.removeEventListener("todos-offline-sync", onSync);
   }, [fetchLists]);
 
+  const [online, setOnline] = useState(
+    () => typeof navigator !== "undefined" && navigator.onLine,
+  );
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", on);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", on);
+    };
+  }, []);
+
+  /** Live done/total counts when lists change via webhook/CLI or another tab. */
+  useEffect(() => {
+    if (!visible || !online) return;
+    const es = new EventSource("/t/lists/events");
+    es.addEventListener("lists", (e) => {
+      try {
+        const raw = (e as MessageEvent<string>).data;
+        const data = JSON.parse(raw) as { lists?: ListEntry[] };
+        if (Array.isArray(data.lists)) {
+          setLists(data.lists);
+          void saveLists(data.lists);
+        }
+      } catch {
+        /* ignore malformed */
+      }
+    });
+    return () => es.close();
+  }, [visible, online]);
+
   const handleCreate = async () => {
     if (!newName.trim()) return;
     setError(null);

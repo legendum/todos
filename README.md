@@ -12,7 +12,7 @@ Self-hostable: the same codebase runs at todos.in and locally via `bun run start
 - **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Service worker via `workbox-build` with version-based cache invalidation.
 - **Human and agent users**: Web UI for humans, webhook URLs for agents and scripts — no API keys required for webhooks.
 - **`todos` CLI**: Syncs a local `todos.md` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
-- **Real-time updates**: SSE stream broadcasts changes so the web UI updates live as agents work.
+- **Real-time updates**: Two complementary SSE streams (see [API](#api)): per-list markdown on `/w/:ulid/events`, and signed-in list summaries on `/t/lists/events` so home-screen counts stay in sync when the CLI or webhook updates a list.
 - **Drag and drop**: Reorder lists and todos directly in the UI.
 - **Legendum billing**: Micro-charges accumulated via Legendum tabs — 2 credits per list, 0.1 per webhook write.
 - **Self-hostable**: MIT license. Single Bun binary + SQLite. No config file.
@@ -134,6 +134,7 @@ All list routes support content negotiation: HTML (browsers), `text/markdown` / 
 | Route | Description |
 |-------|-------------|
 | `GET /` | List all lists (sorted by position) |
+| `GET /t/lists/events` | SSE stream of list metadata (`done`/`total` per list, same JSON shape as `GET /`) — session cookie; see [SSE](#server-sent-events-sse) |
 | `POST /` | Create list (body: `name`) |
 | `GET /:list` | Get todos (`todos.md`) |
 | `PUT /:list` | Replace all todos (body: full `todos.md`) |
@@ -147,9 +148,20 @@ All list routes support content negotiation: HTML (browsers), `text/markdown` / 
 | `GET /w/:ulid` | Get todos — **free** |
 | `PUT /w/:ulid` | Replace all todos — **0.1 credits** |
 | `POST /w/:ulid` | Same as `PUT` |
-| `GET /w/:ulid/events` | SSE stream of updates |
+| `GET /w/:ulid/events` | SSE stream of list body updates (`event: update`, full `todos.md` in `data:` lines) |
 
 Responses: `404` if not found, `402` if no Legendum account linked, `429` if charge fails.
+
+### Server-Sent Events (SSE)
+
+There are **two** streams; the webhook one is **not** replaced — it stays the source of truth for live **markdown** inside an open list.
+
+| Stream | Auth | Purpose | Event |
+|--------|------|---------|--------|
+| `GET /w/:ulid/events` | None (ULID in URL) | Live `todos.md` while viewing that list | `update` — multi-line `data:` body is the full document |
+| `GET /t/lists/events` | Session (same as `GET /`) | Live list index while on the home screen (counts after CLI/webhook or another tab) | `lists` — one `data:` line, JSON `{ lists: [...] }` matching `GET /` |
+
+Both use periodic comment keep-alives so proxies and idle TCP connections do not drop the stream. In dev, `bun run --hot` restarts drop **all** open EventSource connections until you refresh.
 
 ## Data model
 
@@ -246,7 +258,7 @@ bun test       # run tests
 bun run lint   # biome check
 ```
 
-`bun run dev` runs the API with **`--hot`**: when you save a file the process restarts and open **EventSource** connections (`/w/…/events`) drop until you refresh. The server sends periodic SSE keep-alives so an **idle** tab (no edits, no webhook traffic) stays connected instead of hitting typical ~60–120s network idle timeouts.
+`bun run dev` runs the API with **`--hot`**: when you save a file the process restarts and open **EventSource** connections (`/w/…/events` and `/t/lists/events`) drop until you refresh. The server sends periodic SSE keep-alives so an **idle** tab stays connected instead of hitting typical ~60–120s network idle timeouts.
 
 ### Build
 

@@ -380,6 +380,69 @@ Context: we need to ship by Friday
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
   });
 
+  test("GET /t/lists/events returns lists SSE (same auth as app)", async () => {
+    const res = await fetch(`${base}/t/lists/events`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+    const reader = res.body!.getReader();
+    const { value } = await reader.read();
+    reader.releaseLock();
+    const chunk = new TextDecoder().decode(value);
+    expect(chunk).toContain("event: lists");
+    expect(chunk).toContain("data:");
+    expect(chunk).toContain("groceries");
+  });
+
+  test("PUT /:list pushes a second lists SSE event for subscribers", async () => {
+    const { status: createStatus, body: created } = await jsonPost("/", {
+      name: "sse-put-notify",
+    });
+    expect(createStatus).toBe(201);
+    const slug = created.slug as string;
+
+    const sseRes = await fetch(`${base}/t/lists/events`);
+    expect(sseRes.status).toBe(200);
+    const reader = sseRes.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    const until = async (pred: () => boolean, ms: number) => {
+      const end = Date.now() + ms;
+      while (!pred() && Date.now() < end) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+      }
+      expect(pred()).toBe(true);
+    };
+
+    await until(() => buf.split("event: lists").length - 1 >= 1, 3000);
+    expect(buf).toContain(slug);
+
+    const put = await fetch(`${base}/${slug}`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: "[x] one\n[ ] two\n",
+    });
+    expect(put.status).toBe(200);
+
+    await until(() => buf.split("event: lists").length - 1 >= 2, 3000);
+    reader.releaseLock();
+
+    const lastIdx = buf.lastIndexOf("event: lists");
+    const tail = buf.slice(lastIdx);
+    const dataLine = tail.split("\n").find((l) => l.startsWith("data: "));
+    expect(dataLine).toBeDefined();
+    const parsed = JSON.parse(dataLine!.slice(6).trim()) as {
+      lists: Array<{ slug: string; total: number; done: number }>;
+    };
+    const row = parsed.lists.find((l) => l.slug === slug);
+    expect(row).toBeDefined();
+    expect(row!.total).toBe(2);
+    expect(row!.done).toBe(1);
+
+    await fetch(`${base}/${slug}`, { method: "DELETE" });
+  });
+
   test("markdown task list syntax supported by parser and countTodos", async () => {
     const create = await jsonPost("/", { name: "markdown-test" });
     expect(create.status).toBe(201);

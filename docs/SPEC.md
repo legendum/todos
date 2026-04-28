@@ -287,6 +287,7 @@ Other status codes: **400** often uses `{ "error": "invalid_request", "message":
 ### Lists & todos (auth)
 
 - `GET /` — list all lists. Sorted by `position`.
+- `GET /t/lists/events` — SSE stream for the signed-in user (session cookie). Complements per-list webhook SSE (see **Server-Sent Events** below): pushes fresh list metadata when any list changes (web UI, webhook, CLI). Does **not** replace `GET /w/:ulid/events`.
 - `POST /` — create list. Body: `name` (required). Returns list with webhook URL.
 - `GET /:list` — get todos in list. Returns `todos.md` format (or other format via content negotiation).
 - `PUT /:list` — replace all todos. Body: full `todos.md` content. The server stores it verbatim.
@@ -315,11 +316,16 @@ Shared responses: **404** if the ULID is not found (`reason: ulid` — see **Err
 
 ### Server-Sent Events (SSE)
 
-- `GET /w/:ulid/events` — SSE stream for a list (no auth, same access as webhook). The web UI uses this too (it knows the ULID from the list).
+Two streams coexist; each serves a different surface of the app.
 
-When todos change via any source (web UI, webhook, CLI), the server broadcasts the updated `todos.md` to all connected SSE clients.
+**1. Per list (webhook scope, no session)** — `GET /w/:ulid/events`
+
+- No auth beyond the ULID in the URL (same exposure model as `GET /w/:ulid`).
+- When that list’s todos change from **any** source (web UI, webhook, CLI), the server broadcasts the updated `todos.md` to clients subscribed to that ULID.
+- The web UI opens this while **viewing** a list (it already has the ULID).
 
 Event format:
+
 ```
 event: update
 data: ## Sprint 3
@@ -328,7 +334,18 @@ data: [x] Fix bug #42
 data: [ ] Deploy to prod
 ```
 
-This lets the web UI update in real time as agents work on todos via the webhook.
+**2. Per user (session)** — `GET /t/lists/events`
+
+- Requires the same session as other authenticated routes (self-hosted: implicit local user; hosted: Legendum session).
+- When **any** of that user’s lists changes (including via webhook/CLI), the server pushes a `lists` event so the **home** screen can refresh `done` / `total` (and names, order, etc.) without opening a per-list stream for every list.
+- Payload is one JSON object per event, same shape as `GET /` (`{ "lists": [ … ] }`), on a single `data:` line.
+
+```
+event: lists
+data: {"lists":[{"name":"Groceries","slug":"groceries","ulid":"…","position":0,"total":3,"done":1,"updated_at":1710000000}]}
+```
+
+Both streams send periodic SSE comment lines as keep-alives so idle connections survive typical proxy timeouts.
 
 ---
 
@@ -434,7 +451,7 @@ No cron jobs needed — billing is handled by Legendum tabs.
 - [x] **Auth & Legendum**: Login-and-link/callback/logout via Legendum SDK; Legendum middleware for `/t/legendum/*`; link/unlink widget; auto-logout on unlink.
 - [x] **Lists & Todos API**: `GET/POST/DELETE /`, `GET/PUT/POST/DELETE /:list`. PUT and POST both replace full content. Content negotiation (HTML, text, JSON). `todos.md` stored as text column on lists.
 - [x] **Webhook**: `GET/PUT/POST /w/:ulid` — public read/replace in `todos.md` format; PUT and POST identical; quota on writes.
-- [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.md` on any change.
+- [x] **SSE**: `GET /w/:ulid/events` — broadcast updated `todos.md` on any change to that list; `GET /t/lists/events` — authenticated stream, `lists` events (same JSON as `GET /`) when any list for the user changes.
 - [x] **Billing**: Legendum tabs — 2 credits per list create, 0.1 per webhook write, 2-credit tab threshold. No billing in self-hosted mode.
 - [x] **Settings**: `GET /t/settings/me`; Legendum link/unlink via middleware; auto-logout on unlink.
 - [x] **Frontend — layout**: Top bar (logo + install dialog); lists ordered by position; mobile-first portrait PWA.

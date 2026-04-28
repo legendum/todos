@@ -297,6 +297,9 @@ export default {
       if (path === "/t/settings/me" && method === "GET") {
         return addCors(settingsHandlers.getMe(userId));
       }
+      if (path === "/t/lists/events" && method === "GET") {
+        return addCors(listHandlers.sseListsStream(userId, req.signal));
+      }
 
       // List routes
       const listParsed = matchListPath(path);
@@ -410,6 +413,9 @@ export default {
     }
     if (path === "/t/settings/me" && method === "GET") {
       return addCors(settingsHandlers.getMe(userId));
+    }
+    if (path === "/t/lists/events" && method === "GET") {
+      return addCors(listHandlers.sseListsStream(userId, req.signal));
     }
 
     // List routes (authenticated)

@@ -1,9 +1,10 @@
 import { chargeWebhookWrite } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import { isSelfHosted } from "../../lib/mode.js";
-import { broadcast, subscribe } from "../../lib/sse.js";
+import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
+import { notifyListsChanged } from "./lists.js";
 
 type ListRow = {
   id: number;
@@ -67,6 +68,7 @@ export async function replaceWebhookTodos(
     row.id,
   );
   broadcast(ulid, text);
+  notifyListsChanged(row.user_id);
 
   return new Response(text, {
     headers: {
@@ -76,9 +78,6 @@ export async function replaceWebhookTodos(
     },
   });
 }
-
-/** Interval for SSE comment pings — avoids idle TCP/proxy timeouts (~60–120s) with no todo updates. */
-const SSE_HEARTBEAT_MS = 20_000;
 
 /** GET /w/:ulid/events — SSE stream */
 export function sseStream(ulid: string, signal?: AbortSignal): Response {
