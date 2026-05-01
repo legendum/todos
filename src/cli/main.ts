@@ -174,7 +174,7 @@ async function fetchWebhookDocHistory(
   const text = await res.text();
   const todosPath = join(process.cwd(), TODOS_FILE);
   writeFileSync(todosPath, text);
-  printTodos(parseContent(text));
+  printTodos(text);
 }
 
 async function main() {
