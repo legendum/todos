@@ -472,4 +472,59 @@ Note with list
 
     await fetch(`${base}/markdown-test`, { method: "DELETE" });
   });
+
+  test("webhook PUT snapshots then POST undo/redo round-trip", async () => {
+    const { body } = await jsonGet("/");
+    const ulid = body.lists.find(
+      (c: { slug: string }) => c.slug === "groceries",
+    ).ulid;
+
+    const v1 = "[ ] one\n";
+    const v2 = "[ ] two\n";
+
+    let r = await fetch(`${base}/w/${ulid}`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: v1,
+    });
+    expect(r.status).toBe(200);
+
+    r = await fetch(`${base}/w/${ulid}`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: v2,
+    });
+    expect(r.status).toBe(200);
+
+    r = await fetch(`${base}/w/${ulid}/undo`, { method: "POST" });
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe(v1);
+
+    r = await fetch(`${base}/w/${ulid}/redo`, { method: "POST" });
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe(v2);
+  });
+
+  test("POST /w/:ulid/undo returns 409 when stack empty", async () => {
+    const create = await jsonPost("/", { name: "undo-empty-test" });
+    expect(create.status).toBe(201);
+    const u = (create.body as { ulid: string }).ulid;
+
+    const r = await fetch(`${base}/w/${u}/undo`, { method: "POST" });
+    expect(r.status).toBe(409);
+    const j = (await r.json()) as { message?: string };
+    expect(j.message).toBeTruthy();
+  });
+
+  test("POST / rejects 51st list with 403", async () => {
+    const { body } = await jsonGet("/");
+    const start = (body.lists as unknown[]).length;
+    for (let i = start; i < 50; i++) {
+      const { status } = await jsonPost("/", { name: `cap-fill-${i}` });
+      expect(status).toBe(201);
+    }
+    const { status, body: b } = await jsonPost("/", { name: "cap-overflow" });
+    expect(status).toBe(403);
+    expect((b as { message?: string }).message).toContain("50");
+  });
 });

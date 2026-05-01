@@ -1,5 +1,10 @@
 import { chargeListCreate } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
+import {
+  countListsForUser,
+  MAX_LISTS_PER_USER,
+  replaceListTextWithHistory,
+} from "../../lib/listHistory.js";
 import { isSelfHosted } from "../../lib/mode.js";
 import {
   broadcast,
@@ -197,6 +202,16 @@ export async function createList(
     );
   }
 
+  if (countListsForUser(userId) >= MAX_LISTS_PER_USER) {
+    return json(
+      {
+        error: "forbidden",
+        message: "List limit reached (50 per account)",
+      },
+      403,
+    );
+  }
+
   // Charge for list creation
   const chargeError = await chargeListCreate(userId);
   if (chargeError) return chargeError;
@@ -299,7 +314,7 @@ export async function replaceTodos(
   const db = getDb();
   const row = db
     .query(
-      "SELECT id, ulid, name, slug, text FROM lists WHERE user_id = ? AND slug = ?",
+      "SELECT id, ulid, name, slug, text, updated_at FROM lists WHERE user_id = ? AND slug = ?",
     )
     .get(userId, listSlug) as ListRow | undefined;
 
@@ -346,13 +361,22 @@ export async function replaceTodos(
     return json({ error: "invalid_request", message: validationError }, 400);
   }
 
+  if (text === row.text) {
+    const { total, done } = countTodos(text);
+    const updated_at = row.updated_at ?? row.created_at;
+    return json({
+      name: row.name,
+      slug: row.slug,
+      ulid: row.ulid,
+      text,
+      total,
+      done,
+      updated_at,
+    });
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  db.run(
-    "UPDATE lists SET text = ?, updated_at = ? WHERE id = ?",
-    text,
-    now,
-    row.id,
-  );
+  replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(row.ulid, text);
   notifyListsChanged(userId);
 

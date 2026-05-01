@@ -1,5 +1,10 @@
 import { chargeWebhookWrite } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
+import {
+  applyRedo,
+  applyUndo,
+  replaceListTextWithHistory,
+} from "../../lib/listHistory.js";
 import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
@@ -15,6 +20,16 @@ type ListRow = {
   text: string;
   updated_at: number;
 };
+
+function markdownWebhookResponse(text: string, now: number): Response {
+  return new Response(text, {
+    headers: {
+      "Content-Type": "text/markdown; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "X-Updated-At": String(now),
+    },
+  });
+}
 
 function findByUlid(ulid: string): ListRow | undefined {
   const db = getDb();
@@ -49,34 +64,55 @@ export async function replaceWebhookTodos(
   const row = findByUlid(ulid);
   if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
-  // Charge for webhook write
-  const chargeError = await chargeWebhookWrite(row.user_id);
-  if (chargeError) return chargeError;
-
   const text = await req.text();
   const validationError = validateTodosText(text, isSelfHosted());
   if (validationError) {
     return json({ error: "invalid_request", message: validationError }, 400);
   }
 
+  if (text === row.text) {
+    return markdownWebhookResponse(row.text, row.updated_at);
+  }
+
+  const chargeError = await chargeWebhookWrite(row.user_id);
+  if (chargeError) return chargeError;
+
   const now = Math.floor(Date.now() / 1000);
-  const db = getDb();
-  db.run(
-    "UPDATE lists SET text = ?, updated_at = ? WHERE id = ?",
-    text,
-    now,
-    row.id,
-  );
+  replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(ulid, text);
   notifyListsChanged(row.user_id);
 
-  return new Response(text, {
-    headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "X-Updated-At": String(now),
-    },
-  });
+  return markdownWebhookResponse(text, now);
+}
+
+/** POST /w/:ulid/undo — one step back (free; no webhook write charge). */
+export function postWebhookUndo(ulid: string): Response {
+  const row = findByUlid(ulid);
+  if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
+
+  const result = applyUndo(row.id, row.text);
+  if (!result.ok) {
+    return json({ error: "conflict", message: result.message }, 409);
+  }
+
+  broadcast(ulid, result.newText);
+  notifyListsChanged(row.user_id);
+  return markdownWebhookResponse(result.newText, result.now);
+}
+
+/** POST /w/:ulid/redo — one step forward after undo (free). */
+export function postWebhookRedo(ulid: string): Response {
+  const row = findByUlid(ulid);
+  if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
+
+  const result = applyRedo(row.id, row.text);
+  if (!result.ok) {
+    return json({ error: "conflict", message: result.message }, 409);
+  }
+
+  broadcast(ulid, result.newText);
+  notifyListsChanged(row.user_id);
+  return markdownWebhookResponse(result.newText, result.now);
 }
 
 /** GET /w/:ulid/events — SSE stream */

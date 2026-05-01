@@ -71,9 +71,11 @@ Rules:
 - Order = priority. First todo line is most important.
 - Todo **position** is counted among todo lines only (skipping free-form text). Position 1 = first todo line in the document.
 
-Limits:
+Limits (per-account bounds for normal use and to limit **DoS-style abuse**: storage blow-up, oversized bodies, unbounded snapshot rows — see `docs/UNDO.md` §15 for list/stack caps):
+
 - **Max document size**: 10 KB.
 - **Max todo lines**: 200 per list.
+- **Max lists per user**: 50 (abuse / capacity bound; **50 × 200 = 10,000** todo lines max per user at both caps). Enforced on **`POST /`** list creation.
 
 ### 2.5 Drag and drop
 
@@ -85,14 +87,16 @@ Limits:
 
 A lightweight CLI that does two things: (1) syncs `todos.md` with the server, and (2) provides easy commands to edit it. Every command syncs first, then edits, then syncs again. All commands reference todos by **line number** (numbered from 1).
 
-**Command parsing**: Commands like `done`, `del`, `first`, `last` only match when followed by numeric positions. `open`, `skill`, and `purge` only match when they are the sole argument. Anything else is treated as a new todo. Examples: `todos open a restaurant` adds "open a restaurant"; `todos delete the evidence` adds "delete the evidence"; `todos purge the database` adds "purge the database"; `todos del 4` deletes todo at position 4; `todos purge` removes every done item.
+**Command parsing**: Commands like `done`, `todo`, `del`, `first`, `last` only match when followed by numeric positions. `open`, `skill`, `purge`, `undo`, and `redo` only match when they are the sole argument (document `undo`/`redo` take no task numbers). Anything else is treated as a new todo. Examples: `todos open a restaurant` adds "open a restaurant"; `todos delete the evidence` adds "delete the evidence"; `todos purge the database` adds "purge the database"; `todos del 4` deletes todo at position 4; `todos purge` removes every done item.
 
 1. **First run**: Prompts for webhook URL → saves it to `.env` as `TODOS_WEBHOOK`.
 2. **Subsequent runs**: Reads `TODOS_WEBHOOK` from `.env`.
 3. **Usage**:
    - `todos` or `todos list` — list all todos, numbered from 1
    - `todos done 1 3 5` — mark todos at lines 1, 3, 5 as done
-   - `todos undo 1 3 5` — mark todos at lines 1, 3, 5 as not done
+   - `todos todo 1 3 5` — mark todos at lines 1, 3, 5 as not done
+   - `todos undo` — undo the last full-document edit on the server (via webhook; no task numbers)
+   - `todos redo` — redo after `todos undo`
    - `todos del 2` / `todos delete 2` — delete todo at line 2
    - `todos first 4 6` — move todos at lines 4 and 6 to the top (lines 1 and 2, preserving order)
    - `todos last 2 5` — move todos at lines 2 and 5 to the bottom (2 before 5)
@@ -168,7 +172,7 @@ Schema: see `config/schema.sql`.
 - **Domain**: **todos.in**.
 - **CORS**: Open to `*` for API and webhook endpoints.
 - **No push notifications**: Todos does not implement FCM or push. If needed later, integrate with the Alert service.
-- **Self-hostable**: MIT license. Single binary (Bun), SQLite database. No config file required — just `bun run src/api/server.ts` with sensible defaults. If `LEGENDUM_API_KEY` is not set, assume self-hosted mode: skip Legendum auth/billing, no size or todo limits, and serve todos without login. Install globally via `bun link`.
+- **Self-hostable**: MIT license. Single binary (Bun), SQLite database. No config file required — just `bun run src/api/server.ts` with sensible defaults. If `LEGENDUM_API_KEY` is not set, assume self-hosted mode: skip Legendum auth/billing and serve todos without login; **§2.4 Limits** (lists per user, document size, todo lines) still apply unless you fork them out. Install globally via `bun link`.
 
 ### Project structure
 
@@ -242,7 +246,7 @@ Legendum tabs allow micro-charges to accumulate until a threshold is reached, th
 
 ### Self-hosted mode
 
-When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges, no limits on document size or todo count. Everything is free and unlimited.
+When `LEGENDUM_API_KEY` is not set, all billing is disabled — no charges. **Usage caps in §2.4 (Limits)** still apply by default so single-node deployments stay predictable and abuse-resistant; operators may fork the server to relax them for a private install.
 
 ---
 

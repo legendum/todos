@@ -34,6 +34,7 @@ Put prose first so the file reads as a **plan**; use checkboxes for the **execut
 
 - **Read the entire `todos.md`** for goals and constraints, not only unchecked items.
 - After completing work that satisfies a checkbox, **mark it `[x]`** and run `todos` again if `todos.md` changed.
+- Use **`todos todo <n>`** to mark numbered todos not done. **`todos undo`** / **`todos redo`** (no extra arguments) rewind or replay the **last todos.md edit** on the server.
 - Do not strip or ignore freeform sections when editing; preserve planning text unless the user asks to trim it.
 - When editing phases, **keep `- [ ]` / `- [x]` syntax** on task lines so sync and renderers still recognize them.
 

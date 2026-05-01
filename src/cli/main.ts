@@ -134,11 +134,13 @@ Usage:
   todos                    list todos (numbered)
   todos <text>             add a todo
   todos done <n> [...]     mark position(s) done
-  todos undo <n> [...]     mark position(s) not done
+  todos todo <n> [...]     mark position(s) not done
   todos del|delete <n>     delete todo at position
   todos first <n> [...]    move position(s) to the top
   todos last <n> [...]     move position(s) to the bottom
   todos purge              remove all done items
+  todos undo               undo last full-document edit
+  todos redo               redo after undo
   todos open               open this list in the browser
   todos skill              install agent skill for Claude Code / Cursor
   todos help               show this message
@@ -149,6 +151,30 @@ Webhook URL: open https://todos.in, choose a todo list, then tap or click the
 /w/… line under the list name at the top — it copies the webhook to your
 clipboard. Paste that into TODOS_WEBHOOK in your project .env.
 `);
+}
+
+async function fetchWebhookDocHistory(
+  webhookUrl: string,
+  kind: "undo" | "redo",
+): Promise<void> {
+  const u = new URL(webhookUrl);
+  const p = u.pathname.replace(/\/$/, "");
+  const res = await fetch(`${u.origin}${p}/${kind}`, { method: "POST" });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      const j = (await res.json()) as { message?: string };
+      if (j.message) msg = j.message;
+    } catch {
+      /* ignore */
+    }
+    console.error(`${kind} failed (${res.status}): ${msg}`);
+    process.exit(1);
+  }
+  const text = await res.text();
+  const todosPath = join(process.cwd(), TODOS_FILE);
+  writeFileSync(todosPath, text);
+  printTodos(parseContent(text));
 }
 
 async function main() {
@@ -218,6 +244,34 @@ async function main() {
 
   let lines = parseContent(content);
 
+  if (command === "undo") {
+    if (args.length !== 1) {
+      console.error(
+        "Document undo: todos undo (no task numbers). To mark todos not done: todos todo <n> [...]",
+      );
+      process.exit(1);
+    }
+    if (!online) {
+      console.error("(offline — cannot undo on server)");
+      process.exit(1);
+    }
+    await fetchWebhookDocHistory(webhookUrl, "undo");
+    return;
+  }
+
+  if (command === "redo") {
+    if (args.length !== 1) {
+      console.error("Document redo: todos redo (no arguments).");
+      process.exit(1);
+    }
+    if (!online) {
+      console.error("(offline — cannot redo on server)");
+      process.exit(1);
+    }
+    await fetchWebhookDocHistory(webhookUrl, "redo");
+    return;
+  }
+
   // Handle commands
   if (!command || command === "list") {
     // Just list
@@ -228,7 +282,7 @@ async function main() {
         todos[pos - 1].todo.done = true;
       }
     }
-  } else if (command === "undo" && positions.length > 0) {
+  } else if (command === "todo" && positions.length > 0) {
     const todos = getTodoLines(lines);
     for (const pos of positions) {
       if (pos >= 1 && pos <= todos.length) {

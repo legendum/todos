@@ -182,6 +182,17 @@ export default {
     }
 
     // --- Public webhook ---
+    const webhookUndoMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/undo$/);
+    if (webhookUndoMatch && method === "POST") {
+      res = webhookHandlers.postWebhookUndo(webhookUndoMatch[1]);
+      return addCors(res);
+    }
+    const webhookRedoMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/redo$/);
+    if (webhookRedoMatch && method === "POST") {
+      res = webhookHandlers.postWebhookRedo(webhookRedoMatch[1]);
+      return addCors(res);
+    }
+
     const webhookMatch = path.match(/^\/w\/([A-Z0-9]{20,30})$/);
     if (webhookMatch) {
       const ulid = webhookMatch[1];

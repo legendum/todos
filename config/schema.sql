@@ -32,3 +32,21 @@ CREATE TABLE IF NOT EXISTS lists (
 CREATE INDEX IF NOT EXISTS idx_lists_user ON lists(user_id);
 CREATE INDEX IF NOT EXISTS idx_lists_ulid ON lists(ulid);
 CREATE INDEX IF NOT EXISTS idx_lists_user_slug ON lists(user_id, slug);
+
+-- Undo / redo stacks per list (full markdown snapshots). See `docs/UNDO.md`.
+CREATE TABLE IF NOT EXISTS undos (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id    INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+  text       TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS redos (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id    INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+  text       TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_undos_list_id_id ON undos(list_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_redos_list_id_id ON redos(list_id, id DESC);
