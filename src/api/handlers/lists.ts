@@ -1,6 +1,8 @@
 import { chargeListCreate } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import {
+  applyRedo,
+  applyUndo,
   countListsForUser,
   MAX_LISTS_PER_USER,
   replaceListTextWithHistory,
@@ -79,6 +81,38 @@ export function indexLists(userId: number): Response {
 /** Broadcast updated list summaries to all SSE clients for this user (e.g. after webhook/CLI write). */
 export function notifyListsChanged(userId: number): void {
   broadcastUser(userId, JSON.stringify(getListsPayload(userId)));
+}
+
+type ListRowDocHistory = Pick<
+  ListRow,
+  "id" | "ulid" | "user_id" | "text" | "name" | "slug"
+>;
+
+/**
+ * Apply one document undo/redo step: DB mutation, SSE for list body + index.
+ * Used by webhook and authenticated `POST /:slug/undo|redo`.
+ */
+export function runDocHistoryMutation(
+  row: ListRowDocHistory,
+  apply: typeof applyUndo,
+):
+  | { ok: false; response: Response }
+  | { ok: true; newText: string; now: number; row: ListRowDocHistory } {
+  const result = apply(row.id, row.text);
+  if (!result.ok) {
+    return {
+      ok: false,
+      response: json({ error: "conflict", message: result.message }, 409),
+    };
+  }
+  broadcast(row.ulid, result.newText);
+  notifyListsChanged(row.user_id);
+  return {
+    ok: true,
+    newText: result.newText,
+    now: result.now,
+    row,
+  };
 }
 
 function formatListsSSE(listsJsonLine: string): string {
@@ -390,6 +424,55 @@ export async function replaceTodos(
     done,
     updated_at: now,
   });
+}
+
+function postListDocHistory(
+  listSlug: string,
+  userId: number,
+  apply: typeof applyUndo,
+): Response {
+  const db = getDb();
+  const row = db
+    .query(
+      "SELECT id, ulid, name, slug, text, updated_at, user_id FROM lists WHERE user_id = ? AND slug = ?",
+    )
+    .get(userId, listSlug) as ListRow | undefined;
+
+  if (!row) return json({ error: "not_found", reason: "list" }, 404);
+
+  const step = runDocHistoryMutation(
+    {
+      id: row.id,
+      ulid: row.ulid,
+      user_id: row.user_id,
+      text: row.text,
+      name: row.name,
+      slug: row.slug,
+    },
+    apply,
+  );
+  if (!step.ok) return step.response;
+
+  const { total, done } = countTodos(step.newText);
+  return json({
+    name: step.row.name,
+    slug: step.row.slug,
+    ulid: step.row.ulid,
+    text: step.newText,
+    total,
+    done,
+    updated_at: step.now,
+  });
+}
+
+/** POST /:slug/undo — document history (same stacks as webhook; no write charge). */
+export function postListUndo(listSlug: string, userId: number): Response {
+  return postListDocHistory(listSlug, userId, applyUndo);
+}
+
+/** POST /:slug/redo */
+export function postListRedo(listSlug: string, userId: number): Response {
+  return postListDocHistory(listSlug, userId, applyRedo);
 }
 
 /** DELETE /:slug — delete list */

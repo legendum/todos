@@ -111,6 +111,19 @@ function matchListPath(path: string): {
   return null;
 }
 
+/** `POST /:slug/undo` or `POST /:slug/redo` — match before generic list routes. */
+function matchListDocHistory(
+  path: string,
+  method: string,
+): { slug: string; kind: "undo" | "redo" } | null {
+  if (method !== "POST") return null;
+  const undo = path.match(new RegExp(`^\\/(${LIST_SLUG})\\/undo$`));
+  if (undo) return { slug: undo[1], kind: "undo" };
+  const redo = path.match(new RegExp(`^\\/(${LIST_SLUG})\\/redo$`));
+  if (redo) return { slug: redo[1], kind: "redo" };
+  return null;
+}
+
 /** Find the built JS bundle filename (content-hashed). */
 let bundleFile: string | null = null;
 async function getBundleFilename(): Promise<string | null> {
@@ -312,6 +325,15 @@ export default {
         return addCors(listHandlers.sseListsStream(userId, req.signal));
       }
 
+      const docHist = matchListDocHistory(path, method);
+      if (docHist) {
+        res =
+          docHist.kind === "undo"
+            ? listHandlers.postListUndo(docHist.slug, userId)
+            : listHandlers.postListRedo(docHist.slug, userId);
+        return addCors(res);
+      }
+
       // List routes
       const listParsed = matchListPath(path);
       if (
@@ -427,6 +449,15 @@ export default {
     }
     if (path === "/t/lists/events" && method === "GET") {
       return addCors(listHandlers.sseListsStream(userId, req.signal));
+    }
+
+    const docHistAuthed = matchListDocHistory(path, method);
+    if (docHistAuthed) {
+      res =
+        docHistAuthed.kind === "undo"
+          ? listHandlers.postListUndo(docHistAuthed.slug, userId)
+          : listHandlers.postListRedo(docHistAuthed.slug, userId);
+      return addCors(res);
     }
 
     // List routes (authenticated)

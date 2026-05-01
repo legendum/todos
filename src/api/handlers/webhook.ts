@@ -9,7 +9,7 @@ import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
-import { notifyListsChanged } from "./lists.js";
+import { notifyListsChanged, runDocHistoryMutation } from "./lists.js";
 
 type ListRow = {
   id: number;
@@ -90,14 +90,9 @@ export function postWebhookUndo(ulid: string): Response {
   const row = findByUlid(ulid);
   if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
-  const result = applyUndo(row.id, row.text);
-  if (!result.ok) {
-    return json({ error: "conflict", message: result.message }, 409);
-  }
-
-  broadcast(ulid, result.newText);
-  notifyListsChanged(row.user_id);
-  return markdownWebhookResponse(result.newText, result.now);
+  const step = runDocHistoryMutation(row, applyUndo);
+  if (!step.ok) return step.response;
+  return markdownWebhookResponse(step.newText, step.now);
 }
 
 /** POST /w/:ulid/redo — one step forward after undo (free). */
@@ -105,14 +100,9 @@ export function postWebhookRedo(ulid: string): Response {
   const row = findByUlid(ulid);
   if (!row) return json({ error: "not_found", reason: "ulid" }, 404);
 
-  const result = applyRedo(row.id, row.text);
-  if (!result.ok) {
-    return json({ error: "conflict", message: result.message }, 409);
-  }
-
-  broadcast(ulid, result.newText);
-  notifyListsChanged(row.user_id);
-  return markdownWebhookResponse(result.newText, result.now);
+  const step = runDocHistoryMutation(row, applyRedo);
+  if (!step.ok) return step.response;
+  return markdownWebhookResponse(step.newText, step.now);
 }
 
 /** GET /w/:ulid/events — SSE stream */

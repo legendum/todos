@@ -10,19 +10,19 @@ This document specifies **full-markdown undo and redo** for a single list’s `l
 |-------|--------|
 | CLI document commands | **`todos undo`** and **`todos redo`** (no arguments). |
 | Storage | Two tables: **`undos`** (undo stack) and **`redos`** (redo stack), same column layout, **max 10 rows each** per `list_id` (see §3.1, §15). |
-| CLI ↔ server | **`todos undo` / `todos redo` call the list webhook** — no session cookie or separate API auth path for this feature. |
+| CLI ↔ server | **`todos undo` / `todos redo` call the list webhook** — no session. The **PWA** uses **`POST /:slug/undo`** / **`redo`** with a session cookie (see `docs/UNDO-PWA.md`). |
 | Empty document | **Undo may restore `''`.** Redo can bring back content after that. Snapshots include empty text when it is the prior body. |
 | Line endings / dedup (old Q5) | **Byte-identical compare only:** no CRLF normalization for dedup—whatever bytes were saved are what get compared. If clients normalize before send, behavior follows naturally. |
-| Auth surface | **Webhook-only** for undo/redo as specified here (CLI). Authenticated REST shortcuts for the web app are optional later but not required by this spec. |
+| Auth surface | **Webhook** `POST /w/:ulid/undo|redo` (CLI, agents holding the URL). **Session:** `POST /:slug/undo|redo` for the web app (`docs/UNDO-PWA.md`). Same stack logic everywhere. |
 | Agent skill | **`config/SKILL.md`:** update when commands ship so agents see **`todos todo`**, **`todos undo`**, **`todos redo`**. |
 | Lists per user (abuse / capacity) | **Max 50 lists per `user_id`.** With **200 todo lines per list** (see `docs/SPEC.md`), that is at most **10,000 todo lines** across all lists for one account. Enforce on **`POST /`** (create list) before charging / inserting. |
 | History rows per user (abuse / capacity) | With **10** rows max per stack per list: **50 × 10 = 500** max rows in **`undos`** per user and **500** in **`redos`** (**1,000** history rows total at full caps). |
 | HTTP errors | Prefer **`403`** / **`409`** over **`400`** when semantics fit. Avoid **`400`** unless there is no better status. |
-| Billing (webhook undo/redo) | **Free** — do **not** call **`chargeWebhookWrite`** (or equivalent) on **`POST /w/:ulid/undo`** / **`redo`**. |
+| Billing (undo/redo) | **Free** — do **not** call **`chargeWebhookWrite`** (or equivalent) on **`POST /w/:ulid/undo`** / **`redo`** or **`POST /:slug/undo`** / **`redo`**. |
 | Validation after undo/redo | Run the **same** markdown validation as webhook **`PUT`** (e.g. **`validateTodosText`**) on the body **before** committing. If it fails (e.g. snapshot no longer passes current rules), abort and respond **`409`** + JSON **`message`**. |
 | Webhook verbs | **`POST`** only for **`/undo`** / **`redo`** (no **`GET`**). |
 | Route registration | Match **`/w/:ulid/undo`** and **`/w/:ulid/redo`** **before** generic **`/w/:ulid`** so paths are not swallowed. |
-| Web UI | **No** undo/redo in the web app **at this time** (CLI + webhook only). |
+| Web UI | **PWA:** undo/redo in the list header (**`POST /:slug/undo|redo`**, session). Users may also use **CLI** against the webhook. |
 
 The service is **pre-production**; breaking CLI changes are acceptable — no backwards compatibility or migration playbook.
 
@@ -184,6 +184,8 @@ Covered in §4: any **content replace** of **`lists.text`** (§4 paths), **exclu
 | `POST` | `/w/:ulid/undo` | Run §5; success **`200`** + body = new markdown (same `Content-Type` / `X-Updated-At` convention as webhook **`PUT`**). Empty stack → **`409`** + JSON. |
 | `POST` | `/w/:ulid/redo` | Run §6; same response shape. |
 
+Signed-in **PWA** clients use **`POST /:slug/undo`** / **`redo`** instead (JSON body); see **`docs/UNDO-PWA.md`**.
+
 **CLI:** Derive base webhook from **`TODOS_WEBHOOK`** (e.g. `https://host/w/01ARZ3NDEKTSV4RRFFQ69G5FAV`), then **`POST`** to `…/undo` or `…/redo` with **empty body** (or ignore body). No cookies.
 
 **Billing:** **Undo/redo are free** — do **not** charge webhook-write credits / tabs for these endpoints (unlike **`PUT /w/:ulid`**).
@@ -194,7 +196,7 @@ Covered in §4: any **content replace** of **`lists.text`** (§4 paths), **exclu
 
 ## 9. Web UI
 
-**Out of scope for now:** no undo/redo controls in the web app; users rely on **CLI** (**`todos undo`** / **`todos redo`**) hitting the webhook routes above. A future iteration could call the same server helpers; stacks stay server-authoritative.
+The **PWA** exposes full-document undo/redo in the list view (Unicode **↩** / **↪**); implementation and routes are specified in **`docs/UNDO-PWA.md`**. Stacks and algorithms match §5–§6. **CLI** users run **`todos undo`** / **`todos redo`** against the webhook.
 
 ---
 
@@ -237,7 +239,7 @@ Update **`config/schema.sql`** with **`undos`** and **`redos`**. Pre-production:
 - Snapshot text that fails **`validateTodosText`** returns **`409`** (no DB mutation).
 - Webhook `POST …/undo` and `…/redo` + webhook `PUT` + authenticated `PUT` all maintain stacks consistently.
 - `DELETE` list cascades on **`undos`** / **`redos`**.
-- Empty **`undos`** / **`redos`**: webhook returns **`409`** + JSON **`message`** (not **`400`**).
+- Empty **`undos`** / **`redos`**: **`409`** + JSON **`message`** (webhook or **`POST /:slug/…`**; not **`400`**).
 - Creating the **51st** list: **`403`** + JSON **`message`**.
 - CLI help lists **`todos todo`**, **`todos undo`**, **`todos redo`**; **`config/SKILL.md`** matches.
 
@@ -247,10 +249,10 @@ Update **`config/schema.sql`** with **`undos`** and **`redos`**. Pre-production:
 
 - Tables **`undos`** and **`redos`**: `(id, list_id, text, created_at)`, FK → **`lists`**, **≤10 rows each** per list, append-only.
 - **Content replace** (§4 — webhook **`PUT`**, authenticated **`PUT`**, etc.; **not** §5–§6): push **`old`** onto **`undos`**, prune, clear **`redos`**, update **`lists`**.
-- **`POST /w/:ulid/undo`** / **`redo`** only; register **before** **`/w/:ulid`**. Pop stacks per §5–§6; **`409`** when empty stack or validation fails; **no** webhook write charge.
+- **`POST /w/:ulid/undo`** / **`redo`** (`POST` only); register **before** **`/w/:ulid`**. **`POST /:slug/undo`** / **`redo`** for the signed-in PWA — same pop semantics; **`409`** when empty stack or validation fails; **no** webhook write charge on any undo/redo route.
 - **`validateTodosText`** (or equivalent) on undo/redo target body **before** commit.
-- Per-task not-done: **`todos todo <n>`**; document history: **`todos undo`** / **`todos redo`**.
+- Per-task not-done: **`todos todo <n>`**; document history: **`todos undo`** / **`todos redo`** (CLI → webhook) or PWA → **`/:slug/undo|redo`**.
 - **§15:** at most **50 lists** per user (**`403`** at cap); **500** / **500** `undos` / `redos` rows max per user at full stack depth (**1,000** combined); **10,000** todo lines max at per-list caps.
-- **Web UI:** no undo/redo for now.
+- **Web UI:** PWA list header undo/redo (`docs/UNDO-PWA.md`).
 
-Implementation wires through **`webhook.ts`** (new routes first in matcher order), **`lists.ts`** (authenticated PUT, **`createList`** cap **`403`**), shared snapshot helpers, and **`src/cli/main.ts`** + **`config/SKILL.md`**.
+Implementation wires through **`webhook.ts`** (new routes first in matcher order), **`lists.ts`** (authenticated PUT, **`POST /:slug/undo|redo`**, **`createList`** cap **`403`**), shared snapshot helpers, **`src/web/components/TodoList.tsx`**, and **`src/cli/main.ts`** + **`config/SKILL.md`**.

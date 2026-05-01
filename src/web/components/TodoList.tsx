@@ -33,7 +33,6 @@ import CopyIcon from "./CopyIcon";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
-import ShareIcon from "./ShareIcon";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 /** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
@@ -123,6 +122,11 @@ export default function TodoList({
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -180,6 +184,14 @@ export default function TodoList({
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (historyErrorTimerRef.current !== null) {
+        clearTimeout(historyErrorTimerRef.current);
+      }
     };
   }, []);
 
@@ -327,48 +339,64 @@ export default function TodoList({
     [pushToServer],
   );
 
-  const shareMarkdown = useCallback(async () => {
-    const text = serializeLines(lines);
-    const safeSlug = list.slug.replace(/[^\w.-]+/g, "_") || "todos";
-    const filename = `${safeSlug}.md`;
-    const file = new File([text], filename, { type: "text/markdown" });
-
-    const userCancelledShare = (e: unknown) =>
-      e instanceof DOMException && e.name === "AbortError";
-
-    if (navigator.canShare?.({ files: [file] })) {
+  const runDocHistory = useCallback(
+    async (kind: "undo" | "redo") => {
+      if (!online || historyBusy) return;
+      setHistoryBusy(true);
+      setHistoryError(null);
       try {
-        await navigator.share({ files: [file], title: list.name });
-        return;
-      } catch (e) {
-        if (userCancelledShare(e)) return;
-      }
-    }
-
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({
-          title: `${list.name} — todos`,
-          text,
+        const res = await fetch(`/${list.slug}/${kind}`, {
+          method: "POST",
+          credentials: "include",
         });
-        return;
-      } catch (e) {
-        if (userCancelledShare(e)) return;
+        let data: { message?: string; text?: string; updated_at?: number } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* non-JSON */
+        }
+        if (!res.ok) {
+          const msg =
+            typeof data.message === "string"
+              ? data.message
+              : `${kind === "undo" ? "Undo" : "Redo"} failed`;
+          setHistoryError(msg);
+          if (historyErrorTimerRef.current !== null) {
+            clearTimeout(historyErrorTimerRef.current);
+          }
+          historyErrorTimerRef.current = setTimeout(() => {
+            historyErrorTimerRef.current = null;
+            setHistoryError(null);
+          }, 5000);
+          return;
+        }
+        const text = data.text;
+        const updatedAt = data.updated_at;
+        if (typeof text !== "string" || typeof updatedAt !== "number") {
+          setHistoryError("Unexpected response from server");
+          if (historyErrorTimerRef.current !== null) {
+            clearTimeout(historyErrorTimerRef.current);
+          }
+          historyErrorTimerRef.current = setTimeout(() => {
+            historyErrorTimerRef.current = null;
+            setHistoryError(null);
+          }, 5000);
+          return;
+        }
+        markdownMemCache.set(list.slug, text);
+        setLines(parseLines(text));
+        await saveMarkdown({
+          slug: list.slug,
+          text,
+          updatedAt,
+          pending: false,
+        });
+      } finally {
+        setHistoryBusy(false);
       }
-    }
-
-    const url = URL.createObjectURL(
-      new Blob([text], { type: "text/markdown;charset=utf-8" }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2500);
-  }, [lines, list.name, list.slug]);
+    },
+    [historyBusy, list.slug, online],
+  );
 
   const toggleDone = (index: number) => {
     updateLines((prev) =>
@@ -495,18 +523,10 @@ export default function TodoList({
     : null;
 
   return (
-    <div
-      className="screen"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        paddingBottom: 0,
-      }}
-    >
+    <div className="screen screen--detail">
       <div className="screen-header">
         <button className="back-btn" onClick={onBack}>
-          &#8592; Back
+          ◀ Back
         </button>
         <div className="screen-header-text">
           {editingName ? (
@@ -562,16 +582,39 @@ export default function TodoList({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          className="header-icon-btn"
-          title="Share or export markdown"
-          aria-label="Share or export markdown"
-          onClick={() => void shareMarkdown()}
-        >
-          <ShareIcon />
-        </button>
+        <div className="header-doc-history">
+          <button
+            type="button"
+            className="header-icon-btn"
+            title="Undo last edit"
+            aria-label="Undo last edit"
+            disabled={!online || historyBusy}
+            onClick={() => void runDocHistory("undo")}
+          >
+            <span className="header-history-glyph" aria-hidden>
+              ↩
+            </span>
+          </button>
+          <button
+            type="button"
+            className="header-icon-btn"
+            title="Redo"
+            aria-label="Redo"
+            disabled={!online || historyBusy}
+            onClick={() => void runDocHistory("redo")}
+          >
+            <span className="header-history-glyph" aria-hidden>
+              ↪
+            </span>
+          </button>
+        </div>
       </div>
+
+      {historyError ? (
+        <div className="history-error-banner" role="status">
+          {historyError}
+        </div>
+      ) : null}
 
       {!online && (
         <div className="offline-banner">

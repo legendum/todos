@@ -516,6 +516,54 @@ Note with list
     expect(j.message).toBeTruthy();
   });
 
+  test("POST /:slug/undo and /redo return JSON (session)", async () => {
+    const { status, body } = await jsonPost("/", { name: "slug-history-test" });
+    expect(status).toBe(201);
+    const slug = (body as { slug: string }).slug;
+
+    const v1 = "- [ ] one\n";
+    const v2 = "- [ ] two\n";
+
+    let put = await fetch(`${base}/${slug}`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: v1,
+    });
+    expect(put.status).toBe(200);
+
+    put = await fetch(`${base}/${slug}`, {
+      method: "PUT",
+      headers: { "Content-Type": "text/markdown" },
+      body: v2,
+    });
+    expect(put.status).toBe(200);
+
+    let r = await fetch(`${base}/${slug}/undo`, { method: "POST" });
+    expect(r.status).toBe(200);
+    let j = (await r.json()) as { text: string };
+    expect(j.text).toBe(v1);
+
+    r = await fetch(`${base}/${slug}/redo`, { method: "POST" });
+    expect(r.status).toBe(200);
+    j = await r.json();
+    expect(j.text).toBe(v2);
+
+    await fetch(`${base}/${slug}`, { method: "DELETE" });
+  });
+
+  test("POST /:slug/undo returns 409 when stack empty", async () => {
+    const { status, body } = await jsonPost("/", { name: "slug-undo-empty" });
+    expect(status).toBe(201);
+    const slug = (body as { slug: string }).slug;
+
+    const r = await fetch(`${base}/${slug}/undo`, { method: "POST" });
+    expect(r.status).toBe(409);
+    const j = (await r.json()) as { message?: string };
+    expect(j.message).toBeTruthy();
+
+    await fetch(`${base}/${slug}`, { method: "DELETE" });
+  });
+
   test("POST / rejects 51st list with 403", async () => {
     const { body } = await jsonGet("/");
     const start = (body.lists as unknown[]).length;

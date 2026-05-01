@@ -9,7 +9,7 @@ Self-hostable: the same codebase runs at todos.in and locally via `bun run start
 ## Features
 
 - **todos.md format**: Plain text, one todo per line (`[ ]` / `[x]`). Free-form headings and notes are preserved verbatim.
-- **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Service worker via `workbox-build` with version-based cache invalidation.
+- **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Document-level **↩ / ↪** undo/redo in the list header. Service worker via `workbox-build` with version-based cache invalidation.
 - **Human and agent users**: Web UI for humans, webhook URLs for agents and scripts — no API keys required for webhooks.
 - **`todos` CLI**: Syncs a local `todos.md` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
 - **Real-time updates**: Two complementary SSE streams (see [API](#api)): per-list markdown on `/w/:ulid/events`, and signed-in list summaries on `/t/lists/events` so home-screen counts stay in sync when the CLI or webhook updates a list.
@@ -58,6 +58,7 @@ todos               # list todos
 | `todos <text>` | Add a new todo (any text not matching a command) |
 | `todos done <n>...` | Mark todos at given positions as done |
 | `todos undo <n>...` | Mark todos at given positions as not done |
+| `todos undo` / `todos redo` | Undo / redo the **last full-document** edit on the server (webhook; no task numbers) |
 | `todos del <n>` / `todos delete <n>` | Delete todo at position `n` |
 | `todos first <n>...` | Move todos to the top (preserving order) |
 | `todos last <n>...` | Move todos to the bottom |
@@ -139,6 +140,8 @@ All list routes support content negotiation: HTML (browsers), `text/markdown` / 
 | `GET /:list` | Get todos (`todos.md`) |
 | `PUT /:list` | Replace all todos (body: full `todos.md`) |
 | `POST /:list` | Same as `PUT` |
+| `POST /:list/undo` | Full-document undo (free; same stacks webhook/CLI) — JSON response |
+| `POST /:list/redo` | Full-document redo (free) — JSON response |
 | `DELETE /:list` | Delete list |
 
 ### Public webhook (no auth)
@@ -148,6 +151,8 @@ All list routes support content negotiation: HTML (browsers), `text/markdown` / 
 | `GET /w/:ulid` | Get todos — **free** |
 | `PUT /w/:ulid` | Replace all todos — **0.1 credits** |
 | `POST /w/:ulid` | Same as `PUT` |
+| `POST /w/:ulid/undo` | Undo last full-document edit — **free** |
+| `POST /w/:ulid/redo` | Redo after undo — **free** |
 | `GET /w/:ulid/events` | SSE stream of list body updates (`event: update`, full `todos.md` in `data:` lines) |
 
 Responses: `404` if not found, `402` if no Legendum account linked, `429` if charge fails.
