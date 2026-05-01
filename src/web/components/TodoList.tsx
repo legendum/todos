@@ -575,7 +575,7 @@ export default function TodoList({
             title={copied ? "Copied to clipboard" : "Click to copy webhook URL"}
             onClick={copyWebhookUrl}
           >
-            /w/{list.ulid}
+            {list.ulid}
             {copied ? (
               <span className="copied-badge">Copied!</span>
             ) : (
