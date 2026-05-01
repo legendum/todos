@@ -2,10 +2,13 @@
 
 import { execSync } from "node:child_process";
 import {
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -50,9 +53,9 @@ function promptWebhookUrl(): string {
 
 function readLineSync(): string {
   const buf = Buffer.alloc(1024);
-  const fd = require("node:fs").openSync("/dev/stdin", "r");
-  const n = require("node:fs").readSync(fd, buf, 0, 1024, null);
-  require("node:fs").closeSync(fd);
+  const fd = openSync("/dev/stdin", "r");
+  const n = readSync(fd, buf, 0, 1024, null);
+  closeSync(fd);
   return buf.toString("utf-8", 0, n).replace(/\n$/, "");
 }
 
@@ -67,8 +70,6 @@ function getTodoLines(
   }
   return result;
 }
-
-/** Merge local and server content. The newer side wins for done state. */
 
 /** Print todos with line numbers. */
 function printTodos(content: string): void {
@@ -335,7 +336,7 @@ async function main() {
     const pageUrl =
       slug && slug.length > 0
         ? `${origin}/${encodeURIComponent(slug)}`
-        : webhookUrl.replace(/\/w\/[A-Z0-9]+$/, "");
+        : webhookUrl.replace(/\/w\/[A-Za-z0-9]+\/?$/, "");
     try {
       execSync(`open "${pageUrl}"`, { stdio: "ignore" });
     } catch {
