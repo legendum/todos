@@ -9,7 +9,7 @@ Self-hostable: the same codebase runs at todos.in and locally via `bun run start
 ## Features
 
 - **todos.md format**: Plain text, one todo per line (`[ ]` / `[x]`). Free-form headings and notes are preserved verbatim.
-- **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Document-level **↩ / ↪** undo/redo in the list header. Service worker via `workbox-build` with version-based cache invalidation.
+- **Mobile-first PWA**: Portrait-optimized, thumb-friendly, installable to the home screen. Document-level undo/redo in the list header (`public/undo-arrow.svg`, `redo-arrow.svg`). Service worker via `workbox-build` with version-based cache invalidation.
 - **Human and agent users**: Web UI for humans, webhook URLs for agents and scripts — no API keys required for webhooks.
 - **`todos` CLI**: Syncs a local `todos.md` with the server; position-based commands (`done`, `undo`, `del`, `first`, `last`); offline-capable.
 - **Real-time updates**: Two complementary SSE streams (see [API](#api)): per-list markdown on `/w/:ulid/events`, and signed-in list summaries on `/t/lists/events` so home-screen counts stay in sync when the CLI or webhook updates a list.

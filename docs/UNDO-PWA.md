@@ -108,7 +108,7 @@ Hosted responses go through existing **`addCors`** + **`requireAuthAsync`** patt
 
 1. **State refresh:** After success, set in-memory lines from returned **`text`** (or refetch `/${slug}.md`) and update **`saveMarkdown`** / mem cache (`markdownMemCache`) so the UI, offline store, and server agree (**`updated_at`** from response).
 2. **SSE:** Because the server broadcasts like a normal write, other tabs/devices should already converge; no extra client work beyond existing listeners if any.
-3. **Control labels:** Use Unicode **↩** (undo) and **↪** (redo) in the header icon buttons; no share or download UI.
+3. **Control labels:** Undo/redo use masked SVGs from [`public/undo-arrow.svg`](../public/undo-arrow.svg) / [`redo-arrow.svg`](../public/redo-arrow.svg) (see [`DocHistoryArrows.tsx`](../src/web/components/DocHistoryArrows.tsx)); no share or download UI.
 
 ---
 

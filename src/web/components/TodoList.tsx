@@ -30,6 +30,7 @@ import {
 } from "../offlineDb";
 import { patchListName } from "../patchListName";
 import CopyIcon from "./CopyIcon";
+import { DocHistoryRedoArrow, DocHistoryUndoArrow } from "./DocHistoryArrows";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
@@ -591,9 +592,7 @@ export default function TodoList({
             disabled={!online || historyBusy}
             onClick={() => void runDocHistory("undo")}
           >
-            <span className="header-history-glyph" aria-hidden>
-              ↩
-            </span>
+            <DocHistoryUndoArrow />
           </button>
           <button
             type="button"
@@ -603,9 +602,7 @@ export default function TodoList({
             disabled={!online || historyBusy}
             onClick={() => void runDocHistory("redo")}
           >
-            <span className="header-history-glyph" aria-hidden>
-              ↪
-            </span>
+            <DocHistoryRedoArrow />
           </button>
         </div>
       </div>

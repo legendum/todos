@@ -47,6 +47,16 @@ for (const name of ["todos.png", "todos-192.png", "todos-512.png"] as const) {
   }
 }
 
+for (const name of ["undo-arrow.svg", "redo-arrow.svg"] as const) {
+  const rel = `public/${name}`;
+  if (existsSync(resolve(root, rel))) {
+    additionalManifestEntries.push({
+      url: `/${name}`,
+      revision: revisionFor(rel),
+    });
+  }
+}
+
 const { count, size, warnings } = await generateSW({
   swDest: resolve(root, "public/dist/sw.js"),
   globDirectory: resolve(root, "public/dist"),

@@ -196,7 +196,7 @@ Signed-in **PWA** clients use **`POST /:slug/undo`** / **`redo`** instead (JSON 
 
 ## 9. Web UI
 
-The **PWA** exposes full-document undo/redo in the list view (Unicode **↩** / **↪**); implementation and routes are specified in **`docs/UNDO-PWA.md`**. Stacks and algorithms match §5–§6. **CLI** users run **`todos undo`** / **`todos redo`** against the webhook.
+The **PWA** exposes full-document undo/redo in the list view (SVG icons under **`public/`**); implementation and routes are specified in **`docs/UNDO-PWA.md`**. Stacks and algorithms match §5–§6. **CLI** users run **`todos undo`** / **`todos redo`** against the webhook.
 
 ---
 

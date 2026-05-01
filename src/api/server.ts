@@ -250,6 +250,17 @@ export default {
         return new Response(file, { headers: { "Content-Type": "image/png" } });
       }
     }
+    if (path === "/undo-arrow.svg" || path === "/redo-arrow.svg") {
+      const file = Bun.file(join(root, "public", path.slice(1)));
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            "Content-Type": "image/svg+xml",
+            "Cache-Control": "public, max-age=86400",
+          },
+        });
+      }
+    }
     if (path === "/dist/sw.js") {
       const file = Bun.file(join(root, "public/dist/sw.js"));
       if (await file.exists()) {

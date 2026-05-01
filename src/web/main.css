@@ -447,12 +447,28 @@ body {
   gap: 6px;
   flex-shrink: 0;
 }
-.header-history-glyph {
+.header-history-arrow {
   position: relative;
-  top: 4px;
-  font-size: 18px;
-  line-height: 1;
-  user-select: none;
+  top: 1px;
+  display: block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+.header-history-arrow--undo {
+  mask-image: url("/undo-arrow.svg");
+  -webkit-mask-image: url("/undo-arrow.svg");
+}
+.header-history-arrow--redo {
+  mask-image: url("/redo-arrow.svg");
+  -webkit-mask-image: url("/redo-arrow.svg");
 }
 .history-error-banner {
   padding: 8px 16px;
