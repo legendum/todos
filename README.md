@@ -301,6 +301,10 @@ Copies [`config/SKILL.md`](config/SKILL.md) to `~/.claude/skills/todos/SKILL.md`
 
 See [docs/SPEC.md](docs/SPEC.md) for the full product spec and [docs/CONCEPT.md](docs/CONCEPT.md) for the original concept.
 
+## Acknowledgements
+
+Undo/redo list-header icons: vectors from [SVG Repo](https://www.svgrepo.com).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
