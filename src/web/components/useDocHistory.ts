@@ -10,7 +10,7 @@ const ERROR_DISPLAY_MS = 5000;
  * integrating the new text into local state, IndexedDB, and any in-memory
  * caches is the parent's responsibility via `onTextLoaded`.
  */
-export function useListHistory({
+export function useDocHistory({
   slug,
   online,
   onTextLoaded,

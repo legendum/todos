@@ -36,8 +36,8 @@ import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
 import MarkdownSortableRow from "./MarkdownSortableRow";
 import StaticTodoRow from "./StaticTodoRow";
 import TodoSortableRow from "./TodoSortableRow";
+import { useDocHistory } from "./useDocHistory";
 import { useKeyboardSafeBottom } from "./useKeyboardSafeBottom";
-import { useListHistory } from "./useListHistory";
 import { useOnlineStatus } from "./useOnlineStatus";
 import { usePageTitle } from "./usePageTitle";
 
@@ -71,7 +71,7 @@ export default function TodoList({
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const online = useOnlineStatus();
 
-  const onListHistoryTextLoaded = useCallback(
+  const onDocHistoryTextLoaded = useCallback(
     async (text: string, updatedAt: number) => {
       markdownMemCache.set(list.slug, text);
       setLines(parseLines(text));
@@ -85,10 +85,10 @@ export default function TodoList({
     [list.slug],
   );
 
-  const history = useListHistory({
+  const history = useDocHistory({
     slug: list.slug,
     online,
-    onTextLoaded: onListHistoryTextLoaded,
+    onTextLoaded: onDocHistoryTextLoaded,
   });
 
   const sensors = useSensors(
