@@ -299,88 +299,8 @@ export default {
       }
     }
 
-    // --- Self-hosted mode: no auth required ---
-    if (isSelfHosted()) {
-      // Ensure a default user exists
-      const db = getDb();
-      let user = db.query("SELECT id FROM users LIMIT 1").get() as {
-        id: number;
-      } | null;
-      if (!user) {
-        db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
-        user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
-        seedDefaultListsForNewUser(user.id);
-      }
-      const userId = user.id;
-
-      // Lists API
-      if (path === "/" && method === "GET") {
-        const accept = req.headers.get("Accept") ?? "";
-        if (accept.includes("application/json")) {
-          return addCors(listHandlers.indexLists(userId));
-        }
-        return await serveIndex();
-      }
-      if (path === "/" && method === "POST") {
-        res = await listHandlers.createList(req, userId);
-        return addCors(res);
-      }
-      if (path === "/t/reorder" && method === "PATCH") {
-        res = await listHandlers.reorderLists(req, userId);
-        return addCors(res);
-      }
-      if (path === "/t/settings/me" && method === "GET") {
-        return addCors(settingsHandlers.getMe(userId));
-      }
-      if (path === "/t/lists/events" && method === "GET") {
-        return addCors(listHandlers.sseListsStream(userId, req.signal));
-      }
-
-      const docHist = matchListDocHistory(path, method);
-      if (docHist) {
-        res =
-          docHist.kind === "undo"
-            ? listHandlers.postListUndo(docHist.slug, userId)
-            : listHandlers.postListRedo(docHist.slug, userId);
-        return addCors(res);
-      }
-
-      // List routes
-      const listParsed = matchListPath(path);
-      if (
-        listParsed &&
-        !path.startsWith("/t/") &&
-        !path.startsWith("/w/") &&
-        !path.startsWith("/dist/")
-      ) {
-        const { slug, ext } = listParsed;
-
-        if (method === "GET") {
-          const result = listHandlers.getTodos(
-            req,
-            ext ? `${slug}.${ext}` : slug,
-            userId,
-          );
-          if (result === null) return await serveIndex();
-          return addCors(result);
-        }
-        if (method === "PUT" || method === "POST") {
-          res = await listHandlers.replaceTodos(req, slug, userId);
-          return addCors(res);
-        }
-        if (method === "PATCH") {
-          res = await listHandlers.renameList(req, slug, userId);
-          return addCors(res);
-        }
-        if (method === "DELETE") {
-          return addCors(listHandlers.deleteList(slug, userId));
-        }
-      }
-
-      // SPA fallback
-      return await serveIndex();
-    }
-
+    // Browser GETs to non-API paths get the SPA shell. Runs before user
+    // resolution so unauthenticated visitors land on the login UI in hosted mode.
     const accept = req.headers.get("Accept") ?? "";
     const isPageNavigation =
       method === "GET" &&
@@ -394,7 +314,8 @@ export default {
       return await serveIndex();
     }
 
-    // POST link-key: Bearer lak_ only → account_token + optional session cookie. Must run before requireAuth.
+    // POST link-key: Bearer lak_ → account_token + optional session cookie.
+    // Hosted-mode-only and must run before requireAuth.
     if (
       legendumMiddleware &&
       path === "/t/legendum/link-key" &&
@@ -432,18 +353,32 @@ export default {
       return addCors(legendumRes!);
     }
 
-    // Everything below requires auth
-    const auth = await requireAuthAsync(req);
-    if (auth instanceof Response) return addCors(auth);
-    const { userId } = auth;
+    // Resolve the user. Self-hosted: ensure a single local user exists.
+    // Hosted: require a session cookie or Bearer account_token.
+    let userId: number;
+    if (isSelfHosted()) {
+      const db = getDb();
+      let user = db.query("SELECT id FROM users LIMIT 1").get() as {
+        id: number;
+      } | null;
+      if (!user) {
+        db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
+        user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
+        seedDefaultListsForNewUser(user.id);
+      }
+      userId = user.id;
+    } else {
+      const auth = await requireAuthAsync(req);
+      if (auth instanceof Response) return addCors(auth);
+      userId = auth.userId;
 
-    // Legendum middleware
-    if (legendumMiddleware) {
-      const legendumRes = await legendumMiddleware(req, userId);
-      if (legendumRes) return addCors(legendumRes);
+      if (legendumMiddleware) {
+        const legendumRes = await legendumMiddleware(req, userId);
+        if (legendumRes) return addCors(legendumRes);
+      }
     }
 
-    // Lists API
+    // --- Unified routes (both modes) ---
     if (path === "/" && method === "GET") {
       return addCors(listHandlers.indexLists(userId));
     }
@@ -462,16 +397,15 @@ export default {
       return addCors(listHandlers.sseListsStream(userId, req.signal));
     }
 
-    const docHistAuthed = matchListDocHistory(path, method);
-    if (docHistAuthed) {
+    const docHist = matchListDocHistory(path, method);
+    if (docHist) {
       res =
-        docHistAuthed.kind === "undo"
-          ? listHandlers.postListUndo(docHistAuthed.slug, userId)
-          : listHandlers.postListRedo(docHistAuthed.slug, userId);
+        docHist.kind === "undo"
+          ? listHandlers.postListUndo(docHist.slug, userId)
+          : listHandlers.postListRedo(docHist.slug, userId);
       return addCors(res);
     }
 
-    // List routes (authenticated)
     const listParsed = matchListPath(path);
     if (
       listParsed &&
@@ -503,6 +437,9 @@ export default {
       }
     }
 
+    // Self-hosted historically served the SPA for any unmatched route;
+    // preserve that to avoid surprising existing clients.
+    if (isSelfHosted()) return await serveIndex();
     return addCors(json({ error: "not_found", reason: "route" }, 404));
   },
 };
