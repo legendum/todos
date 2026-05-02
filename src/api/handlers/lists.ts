@@ -339,6 +339,13 @@ export function getTodos(
   return null;
 }
 
+/** Read a string-valued field from a parsed JSON value. Returns undefined if missing or not a string. */
+function getStringField(obj: unknown, field: string): string | undefined {
+  if (typeof obj !== "object" || obj === null) return undefined;
+  const value = (obj as Record<string, unknown>)[field];
+  return typeof value === "string" ? value : undefined;
+}
+
 /** PUT or POST /:slug — replace all todos (raw markdown or JSON `{ markdown }` / `{ text }`). */
 export async function replaceTodos(
   req: Request,
@@ -363,21 +370,11 @@ export async function replaceTodos(
     } catch {
       return json({ error: "invalid_request", message: "Invalid JSON" }, 400);
     }
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "markdown" in parsed &&
-      typeof (parsed as { markdown: unknown }).markdown === "string"
-    ) {
-      text = (parsed as { markdown: string }).markdown;
-    } else if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "text" in parsed &&
-      typeof (parsed as { text: unknown }).text === "string"
-    ) {
-      text = (parsed as { text: string }).text;
-    } else {
+    // `markdown` is the documented field; `text` is accepted as an alias for
+    // backwards compatibility with earlier callers.
+    const body =
+      getStringField(parsed, "markdown") ?? getStringField(parsed, "text");
+    if (body === undefined) {
       return json(
         {
           error: "invalid_request",
@@ -387,6 +384,7 @@ export async function replaceTodos(
         400,
       );
     }
+    text = body;
   } else {
     text = await req.text();
   }

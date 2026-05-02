@@ -22,8 +22,8 @@ beforeAll(async () => {
   // Import and start server
   const mod = await import("../src/api/server");
   server = Bun.serve({
+    ...mod.default,
     port: PORT,
-    fetch: mod.default.fetch,
   });
 });
 

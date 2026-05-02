@@ -76,18 +76,23 @@ const legendumMiddleware = legendumSdk.isConfigured()
     })
   : null;
 
-const corsHeaders: HeadersInit = {
+// CORS is needed only on the public webhook surface (`/w/:ulid` and friends),
+// which third-party agents and scripts hit cross-origin. The PWA frontend is
+// same-origin and chats2me hits us server-to-server, so neither needs CORS.
+// Webhook routes do not authenticate via Authorization (the ULID in the URL
+// is the credential), so Authorization is intentionally absent here.
+const webhookCorsHeaders: HeadersInit = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
 };
 
-function addCors(res: Response): Response {
+function addWebhookCors(res: Response): Response {
   const r = new Response(res.body, {
     status: res.status,
     headers: res.headers,
   });
-  for (const [k, v] of Object.entries(corsHeaders)) r.headers.set(k, v);
+  for (const [k, v] of Object.entries(webhookCorsHeaders)) r.headers.set(k, v);
   return r;
 }
 
@@ -138,6 +143,30 @@ async function getBundleFilename(): Promise<string | null> {
   return null;
 }
 
+/** Webhook OPTIONS preflight — shared across all `/w/:ulid` routes. */
+function webhookCorsPreflight(): Response {
+  return new Response(null, { status: 204, headers: webhookCorsHeaders });
+}
+
+/** Serve a file from disk; 404 if missing. */
+async function serveStatic(
+  filePath: string,
+  contentType: string,
+  cacheControl?: string,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) {
+    return new Response("Not found", { status: 404 });
+  }
+  const headers: Record<string, string> = {
+    "Content-Type": contentType,
+    ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+    ...(extraHeaders ?? {}),
+  };
+  return new Response(file, { headers });
+}
+
 async function serveIndex(): Promise<Response> {
   const bundle = await getBundleFilename();
   const scriptTag = bundle
@@ -167,112 +196,97 @@ async function serveIndex(): Promise<Response> {
 export default {
   port: PORT,
   development: !!process.env.DEV,
+  routes: {
+    // --- Auth (only mounted in hosted mode; top-level browser nav, no CORS) ---
+    ...(legendumSdk.isConfigured()
+      ? {
+          "/auth/login": {
+            GET: (req: Request) => authHandlers.getLogin(req),
+          },
+          "/auth/callback": {
+            GET: (req: Request) => authHandlers.getCallback(req),
+          },
+          "/auth/logout": {
+            POST: () => authHandlers.postLogout(),
+          },
+        }
+      : {}),
+
+    // --- Public webhook (cross-origin: CORS applied) ---
+    "/w/:ulid": {
+      OPTIONS: webhookCorsPreflight,
+      GET: (req: { params: { ulid: string } }) =>
+        addWebhookCors(webhookHandlers.getWebhookTodos(req.params.ulid)),
+      PUT: async (req: Request & { params: { ulid: string } }) =>
+        addWebhookCors(
+          await webhookHandlers.replaceWebhookTodos(req, req.params.ulid),
+        ),
+      POST: async (req: Request & { params: { ulid: string } }) =>
+        addWebhookCors(
+          await webhookHandlers.replaceWebhookTodos(req, req.params.ulid),
+        ),
+    },
+    "/w/:ulid/undo": {
+      OPTIONS: webhookCorsPreflight,
+      POST: (req: { params: { ulid: string } }) =>
+        addWebhookCors(webhookHandlers.postWebhookUndo(req.params.ulid)),
+    },
+    "/w/:ulid/redo": {
+      OPTIONS: webhookCorsPreflight,
+      POST: (req: { params: { ulid: string } }) =>
+        addWebhookCors(webhookHandlers.postWebhookRedo(req.params.ulid)),
+    },
+    "/w/:ulid/events": {
+      OPTIONS: webhookCorsPreflight,
+      GET: (req: Request & { params: { ulid: string } }) =>
+        addWebhookCors(webhookHandlers.sseStream(req.params.ulid, req.signal)),
+    },
+
+    // --- Static assets (same-origin, no CORS) ---
+    "/main.css": () => serveStatic(join(root, "src/web/main.css"), "text/css"),
+    "/manifest.json": () =>
+      serveStatic(
+        join(root, "src/web/manifest.json"),
+        "application/manifest+json",
+      ),
+    "/todos.png": () =>
+      serveStatic(join(root, "public/todos.png"), "image/png"),
+    "/todos-192.png": () =>
+      serveStatic(join(root, "public/todos-192.png"), "image/png"),
+    "/todos-512.png": () =>
+      serveStatic(join(root, "public/todos-512.png"), "image/png"),
+    "/undo-arrow.svg": () =>
+      serveStatic(
+        join(root, "public/undo-arrow.svg"),
+        "image/svg+xml",
+        "public, max-age=86400",
+      ),
+    "/redo-arrow.svg": () =>
+      serveStatic(
+        join(root, "public/redo-arrow.svg"),
+        "image/svg+xml",
+        "public, max-age=86400",
+      ),
+    "/dist/sw.js": () =>
+      serveStatic(
+        join(root, "public/dist/sw.js"),
+        "application/javascript",
+        "no-cache",
+        { "Service-Worker-Allowed": "/" },
+      ),
+  },
   async fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
 
-    if (method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
+    // OPTIONS preflight for any webhook path not explicitly registered above
+    // (also covers any future webhook routes that fall through to fetch).
+    if (method === "OPTIONS" && path.startsWith("/w/")) {
+      return new Response(null, { status: 204, headers: webhookCorsHeaders });
     }
 
-    let res: Response;
-
-    // --- Auth (no auth required) ---
-    if (legendumSdk.isConfigured()) {
-      if (path === "/auth/login" && method === "GET") {
-        res = await authHandlers.getLogin(req);
-        return addCors(res);
-      }
-      if (path === "/auth/callback" && method === "GET") {
-        res = await authHandlers.getCallback(req);
-        return addCors(res);
-      }
-      if (path === "/auth/logout" && method === "POST") {
-        res = await authHandlers.postLogout();
-        return addCors(res);
-      }
-    }
-
-    // --- Public webhook ---
-    const webhookUndoMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/undo$/);
-    if (webhookUndoMatch && method === "POST") {
-      res = webhookHandlers.postWebhookUndo(webhookUndoMatch[1]);
-      return addCors(res);
-    }
-    const webhookRedoMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/redo$/);
-    if (webhookRedoMatch && method === "POST") {
-      res = webhookHandlers.postWebhookRedo(webhookRedoMatch[1]);
-      return addCors(res);
-    }
-
-    const webhookMatch = path.match(/^\/w\/([A-Z0-9]{20,30})$/);
-    if (webhookMatch) {
-      const ulid = webhookMatch[1];
-      if (method === "GET")
-        return addCors(webhookHandlers.getWebhookTodos(ulid));
-      if (method === "PUT" || method === "POST") {
-        res = await webhookHandlers.replaceWebhookTodos(req, ulid);
-        return addCors(res);
-      }
-    }
-
-    // SSE
-    const sseMatch = path.match(/^\/w\/([A-Z0-9]{20,30})\/events$/);
-    if (sseMatch && method === "GET") {
-      return addCors(webhookHandlers.sseStream(sseMatch[1], req.signal));
-    }
-
-    // --- Static assets ---
-    if (path === "/main.css") {
-      const file = Bun.file(join(root, "src/web/main.css"));
-      if (await file.exists()) {
-        return new Response(file, { headers: { "Content-Type": "text/css" } });
-      }
-    }
-    if (path === "/manifest.json") {
-      const file = Bun.file(join(root, "src/web/manifest.json"));
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: { "Content-Type": "application/manifest+json" },
-        });
-      }
-    }
-    const publicPng: Record<string, string> = {
-      "/todos.png": "todos.png",
-      "/todos-192.png": "todos-192.png",
-      "/todos-512.png": "todos-512.png",
-    };
-    const pngName = publicPng[path];
-    if (pngName) {
-      const file = Bun.file(join(root, "public", pngName));
-      if (await file.exists()) {
-        return new Response(file, { headers: { "Content-Type": "image/png" } });
-      }
-    }
-    if (path === "/undo-arrow.svg" || path === "/redo-arrow.svg") {
-      const file = Bun.file(join(root, "public", path.slice(1)));
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: {
-            "Content-Type": "image/svg+xml",
-            "Cache-Control": "public, max-age=86400",
-          },
-        });
-      }
-    }
-    if (path === "/dist/sw.js") {
-      const file = Bun.file(join(root, "public/dist/sw.js"));
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: {
-            "Content-Type": "application/javascript",
-            "Cache-Control": "no-cache",
-            "Service-Worker-Allowed": "/",
-          },
-        });
-      }
-    }
+    // --- Workbox + hashed dist bundles (pattern-matched, kept in fetch) ---
     if (/^\/dist\/workbox-[a-f0-9]+\.js(\.map)?$/.test(path)) {
       const file = Bun.file(join(root, "public", path.slice(1)));
       if (await file.exists()) {
@@ -338,19 +352,15 @@ export default {
               "Content-Type": "application/json",
             });
             headers.append("Set-Cookie", setAuthCookieHeader(row.id));
-            return addCors(
-              new Response(JSON.stringify(data), { status: 200, headers }),
-            );
+            return new Response(JSON.stringify(data), { status: 200, headers });
           }
         }
-        return addCors(
-          new Response(JSON.stringify(data), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
-      return addCors(legendumRes!);
+      return legendumRes!;
     }
 
     // Resolve the user. Self-hosted: ensure a single local user exists.
@@ -369,41 +379,37 @@ export default {
       userId = user.id;
     } else {
       const auth = await requireAuthAsync(req);
-      if (auth instanceof Response) return addCors(auth);
+      if (auth instanceof Response) return auth;
       userId = auth.userId;
 
       if (legendumMiddleware) {
         const legendumRes = await legendumMiddleware(req, userId);
-        if (legendumRes) return addCors(legendumRes);
+        if (legendumRes) return legendumRes;
       }
     }
 
-    // --- Unified routes (both modes) ---
+    // --- Unified routes (both modes; same-origin / server-to-server, no CORS) ---
     if (path === "/" && method === "GET") {
-      return addCors(listHandlers.indexLists(userId));
+      return listHandlers.indexLists(userId);
     }
     if (path === "/" && method === "POST") {
-      res = await listHandlers.createList(req, userId);
-      return addCors(res);
+      return await listHandlers.createList(req, userId);
     }
     if (path === "/t/reorder" && method === "PATCH") {
-      res = await listHandlers.reorderLists(req, userId);
-      return addCors(res);
+      return await listHandlers.reorderLists(req, userId);
     }
     if (path === "/t/settings/me" && method === "GET") {
-      return addCors(settingsHandlers.getMe(userId));
+      return settingsHandlers.getMe(userId);
     }
     if (path === "/t/lists/events" && method === "GET") {
-      return addCors(listHandlers.sseListsStream(userId, req.signal));
+      return listHandlers.sseListsStream(userId, req.signal);
     }
 
     const docHist = matchListDocHistory(path, method);
     if (docHist) {
-      res =
-        docHist.kind === "undo"
-          ? listHandlers.postListUndo(docHist.slug, userId)
-          : listHandlers.postListRedo(docHist.slug, userId);
-      return addCors(res);
+      return docHist.kind === "undo"
+        ? listHandlers.postListUndo(docHist.slug, userId)
+        : listHandlers.postListRedo(docHist.slug, userId);
     }
 
     const listParsed = matchListPath(path);
@@ -422,25 +428,23 @@ export default {
           userId,
         );
         if (result === null) return await serveIndex();
-        return addCors(result);
+        return result;
       }
       if (method === "PUT" || method === "POST") {
-        res = await listHandlers.replaceTodos(req, slug, userId);
-        return addCors(res);
+        return await listHandlers.replaceTodos(req, slug, userId);
       }
       if (method === "PATCH") {
-        res = await listHandlers.renameList(req, slug, userId);
-        return addCors(res);
+        return await listHandlers.renameList(req, slug, userId);
       }
       if (method === "DELETE") {
-        return addCors(listHandlers.deleteList(slug, userId));
+        return listHandlers.deleteList(slug, userId);
       }
     }
 
     // Self-hosted historically served the SPA for any unmatched route;
     // preserve that to avoid surprising existing clients.
     if (isSelfHosted()) return await serveIndex();
-    return addCors(json({ error: "not_found", reason: "route" }, 404));
+    return json({ error: "not_found", reason: "route" }, 404);
   },
 };
 
