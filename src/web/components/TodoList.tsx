@@ -37,6 +37,7 @@ import MarkdownSortableRow from "./MarkdownSortableRow";
 import StaticTodoRow from "./StaticTodoRow";
 import TodoSortableRow from "./TodoSortableRow";
 import { useKeyboardSafeBottom } from "./useKeyboardSafeBottom";
+import { useListHistory } from "./useListHistory";
 import { useOnlineStatus } from "./useOnlineStatus";
 import { usePageTitle } from "./usePageTitle";
 
@@ -69,11 +70,26 @@ export default function TodoList({
   const initialScrollSlugRef = useRef<string | null>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const online = useOnlineStatus();
-  const [historyBusy, setHistoryBusy] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const historyErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
+
+  const onListHistoryTextLoaded = useCallback(
+    async (text: string, updatedAt: number) => {
+      markdownMemCache.set(list.slug, text);
+      setLines(parseLines(text));
+      await saveMarkdown({
+        slug: list.slug,
+        text,
+        updatedAt,
+        pending: false,
+      });
+    },
+    [list.slug],
   );
+
+  const history = useListHistory({
+    slug: list.slug,
+    online,
+    onTextLoaded: onListHistoryTextLoaded,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -119,14 +135,6 @@ export default function TodoList({
       : `${list.name} — Todos`;
   }, [list.name, lines]);
   usePageTitle(pageTitle);
-
-  useEffect(() => {
-    return () => {
-      if (historyErrorTimerRef.current !== null) {
-        clearTimeout(historyErrorTimerRef.current);
-      }
-    };
-  }, []);
 
   useKeyboardSafeBottom(addBarRef);
 
@@ -252,65 +260,6 @@ export default function TodoList({
       });
     },
     [pushToServer],
-  );
-
-  const runDocHistory = useCallback(
-    async (kind: "undo" | "redo") => {
-      if (!online || historyBusy) return;
-      setHistoryBusy(true);
-      setHistoryError(null);
-      try {
-        const res = await fetch(`/${list.slug}/${kind}`, {
-          method: "POST",
-          credentials: "include",
-        });
-        let data: { message?: string; text?: string; updated_at?: number } = {};
-        try {
-          data = (await res.json()) as typeof data;
-        } catch {
-          /* non-JSON */
-        }
-        if (!res.ok) {
-          const msg =
-            typeof data.message === "string"
-              ? data.message
-              : `${kind === "undo" ? "Undo" : "Redo"} failed`;
-          setHistoryError(msg);
-          if (historyErrorTimerRef.current !== null) {
-            clearTimeout(historyErrorTimerRef.current);
-          }
-          historyErrorTimerRef.current = setTimeout(() => {
-            historyErrorTimerRef.current = null;
-            setHistoryError(null);
-          }, 5000);
-          return;
-        }
-        const text = data.text;
-        const updatedAt = data.updated_at;
-        if (typeof text !== "string" || typeof updatedAt !== "number") {
-          setHistoryError("Unexpected response from server");
-          if (historyErrorTimerRef.current !== null) {
-            clearTimeout(historyErrorTimerRef.current);
-          }
-          historyErrorTimerRef.current = setTimeout(() => {
-            historyErrorTimerRef.current = null;
-            setHistoryError(null);
-          }, 5000);
-          return;
-        }
-        markdownMemCache.set(list.slug, text);
-        setLines(parseLines(text));
-        await saveMarkdown({
-          slug: list.slug,
-          text,
-          updatedAt,
-          pending: false,
-        });
-      } finally {
-        setHistoryBusy(false);
-      }
-    },
-    [historyBusy, list.slug, online],
   );
 
   const toggleDone = (index: number) => {
@@ -503,8 +452,8 @@ export default function TodoList({
             className="header-icon-btn"
             title="Undo last edit"
             aria-label="Undo last edit"
-            disabled={!online || historyBusy}
-            onClick={() => void runDocHistory("undo")}
+            disabled={!online || history.busy}
+            onClick={() => void history.run("undo")}
           >
             <DocHistoryUndoArrow />
           </button>
@@ -513,17 +462,17 @@ export default function TodoList({
             className="header-icon-btn"
             title="Redo"
             aria-label="Redo"
-            disabled={!online || historyBusy}
-            onClick={() => void runDocHistory("redo")}
+            disabled={!online || history.busy}
+            onClick={() => void history.run("redo")}
           >
             <DocHistoryRedoArrow />
           </button>
         </div>
       </div>
 
-      {historyError ? (
+      {history.error ? (
         <div className="history-error-banner" role="status">
-          {historyError}
+          {history.error}
         </div>
       ) : null}
 
