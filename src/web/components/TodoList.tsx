@@ -11,17 +11,9 @@ import {
 import {
   arrayMove,
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ParsedLine, TodoListMarker } from "../../lib/todos";
-import {
-  mergeConsecutiveFreeformLines,
-  parseContent,
-  serializeContent,
-} from "../../lib/todos";
 import {
   deleteMarkdown,
   getMarkdown,
@@ -29,68 +21,24 @@ import {
   saveMarkdown,
 } from "../offlineDb";
 import { patchListName } from "../patchListName";
+import CheckIcon from "./CheckIcon";
 import CopyIcon from "./CopyIcon";
 import { DocHistoryRedoArrow, DocHistoryUndoArrow } from "./DocHistoryArrows";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
+import {
+  type Line,
+  markdownMemCache,
+  parseLines,
+  serializeLines,
+} from "./lines";
 import MarkdownBlock, { TodoMarkdownText } from "./MarkdownBlock";
-import { useSwipeToReveal } from "./useSwipeToReveal";
-
-/** Client row for DnD + editing; mirrors `ParsedLine` without invalid `raw` on todos. */
-type Line =
-  | {
-      id: string;
-      isTodo: true;
-      done: boolean;
-      text: string;
-      indent?: string;
-      listMarker?: TodoListMarker;
-    }
-  | { id: string; isTodo: false; text: string };
-
-/**
- * In-memory cache of the last-seen markdown per list, keyed by slug.
- * Used to prime `lines` synchronously when the user re-opens a list
- * they've already visited this session, so the rows area doesn't flash
- * blank while IndexedDB and the network fetch resolve.
- */
-const markdownMemCache = new Map<string, string>();
-
-function parseLines(content: string): Line[] {
-  if (!content) return [];
-  return mergeConsecutiveFreeformLines(parseContent(content)).map((p, i) => {
-    const id = `line-${i}`;
-    if (p.isTodo) {
-      const t = p.todo;
-      return {
-        id,
-        isTodo: true,
-        done: t.done,
-        text: t.text,
-        indent: t.indent,
-        listMarker: t.listMarker,
-      };
-    }
-    return { id, isTodo: false, text: p.raw };
-  });
-}
-
-function serializeLines(lines: Line[]): string {
-  const mapped: ParsedLine[] = lines.map((l) =>
-    l.isTodo
-      ? {
-          isTodo: true,
-          todo: {
-            done: l.done,
-            text: l.text,
-            indent: l.indent,
-            listMarker: l.listMarker,
-          },
-        }
-      : { isTodo: false, raw: l.text },
-  );
-  return serializeContent(mapped);
-}
+import MarkdownSortableRow from "./MarkdownSortableRow";
+import StaticTodoRow from "./StaticTodoRow";
+import TodoSortableRow from "./TodoSortableRow";
+import { useKeyboardSafeBottom } from "./useKeyboardSafeBottom";
+import { useOnlineStatus } from "./useOnlineStatus";
+import { usePageTitle } from "./usePageTitle";
 
 type Props = {
   list: ListEntry;
@@ -120,9 +68,7 @@ export default function TodoList({
   const listScrollRef = useRef<HTMLDivElement>(null);
   const initialScrollSlugRef = useRef<string | null>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
+  const online = useOnlineStatus();
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const historyErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -163,30 +109,16 @@ export default function TodoList({
     });
   }, [list.slug, lines.length]);
 
-  // Update page title with list name and counts
-  useEffect(() => {
+  // Page title reflects list name and todo counts.
+  const pageTitle = useMemo(() => {
     const todos = lines.filter((l) => l.isTodo);
     const done = todos.filter((l) => l.done).length;
     const total = todos.length;
-    document.title =
-      total > 0
-        ? `${list.name} (${done}/${total}) — Todos`
-        : `${list.name} — Todos`;
-    return () => {
-      document.title = "Todos";
-    };
+    return total > 0
+      ? `${list.name} (${done}/${total}) — Todos`
+      : `${list.name} — Todos`;
   }, [list.name, lines]);
-
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
+  usePageTitle(pageTitle);
 
   useEffect(() => {
     return () => {
@@ -196,25 +128,7 @@ export default function TodoList({
     };
   }, []);
 
-  // Pin the add-todo bar to the bottom of the *visual* viewport so it floats
-  // just above the mobile keyboard instead of getting pushed off-screen.
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const el = addBarRef.current;
-      if (!el) return;
-      const offset = window.innerHeight - vv.offsetTop - vv.height;
-      el.style.bottom = `${Math.max(0, offset)}px`;
-    };
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    update();
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
+  useKeyboardSafeBottom(addBarRef);
 
   // Load markdown from IndexedDB and network in parallel. IDB usually wins,
   // so rows appear immediately; network result then overwrites with fresher
@@ -736,207 +650,5 @@ export default function TodoList({
         />
       )}
     </div>
-  );
-}
-
-/** Free-form line: whole row is draggable; markdown is read-only (no swipe edit/delete). */
-function MarkdownSortableRow({
-  line,
-}: {
-  line: Extract<Line, { isTodo: false }>;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: line.id });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <div
-        className="row-wrap markdown-sortable-row"
-        style={{ borderBottom: "none" }}
-      >
-        <div className="md-sortable-inner">
-          <DragHandle listeners={listeners} />
-          <MarkdownBlock text={line.text} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TodoSortableRow({
-  line,
-  onToggle,
-  onDelete,
-  onEdit,
-}: {
-  line: Extract<Line, { isTodo: true }>;
-  onToggle: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: line.id });
-  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
-    actionCount: 2,
-  });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const indentPad = (line.indent || "").length * 20;
-
-  const content = (
-    <div
-      className="todo-row"
-      style={indentPad ? { paddingLeft: `${16 + indentPad}px` } : undefined}
-    >
-      <DragHandle listeners={listeners} />
-      <button
-        type="button"
-        className={`todo-checkbox${line.done ? " checked" : ""}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-      >
-        {line.done && <CheckIcon />}
-      </button>
-      <span className={`todo-text${line.done ? " done" : ""}`}>
-        <TodoMarkdownText text={line.text} />
-      </span>
-    </div>
-  );
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <div className="row-wrap" style={{ borderBottom: "none" }}>
-        <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-          <div className="row-main">{content}</div>
-          <button
-            type="button"
-            className="row-edit"
-            onClick={() => {
-              reset();
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
-          <button type="button" className="row-delete" onClick={onDelete}>
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Non-draggable todo row used while a filter is active — reordering a filtered
- * subset would silently rearrange hidden neighbours, so drag is disabled. */
-function StaticTodoRow({
-  line,
-  onToggle,
-  onDelete,
-  onEdit,
-}: {
-  line: Extract<Line, { isTodo: true }>;
-  onToggle: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-}) {
-  const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
-    actionCount: 2,
-  });
-
-  const indentPad = (line.indent || "").length * 20;
-
-  return (
-    <div className="row-wrap" style={{ borderBottom: "none" }}>
-      <div className="row-slider" style={sliderStyle} {...slideHandlers}>
-        <div className="row-main">
-          <div
-            className="todo-row"
-            style={
-              indentPad ? { paddingLeft: `${16 + indentPad}px` } : undefined
-            }
-          >
-            <div className="drag-handle drag-handle--static" aria-hidden>
-              <svg viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="5" cy="3" r="1.5" />
-                <circle cx="11" cy="3" r="1.5" />
-                <circle cx="5" cy="8" r="1.5" />
-                <circle cx="11" cy="8" r="1.5" />
-                <circle cx="5" cy="13" r="1.5" />
-                <circle cx="11" cy="13" r="1.5" />
-              </svg>
-            </div>
-            <button
-              type="button"
-              className={`todo-checkbox${line.done ? " checked" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggle();
-              }}
-            >
-              {line.done && <CheckIcon />}
-            </button>
-            <span className={`todo-text${line.done ? " done" : ""}`}>
-              <TodoMarkdownText text={line.text} />
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="row-edit"
-          onClick={() => {
-            reset();
-            onEdit();
-          }}
-        >
-          Edit
-        </button>
-        <button type="button" className="row-delete" onClick={onDelete}>
-          Delete
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 7l3.5 3.5L12 3" />
-    </svg>
   );
 }
