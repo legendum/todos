@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { syncMarkdownAfterReconnect } from "./syncMarkdown";
+import "./theme";
 
 window.addEventListener("online", () => {
   void syncMarkdownAfterReconnect();

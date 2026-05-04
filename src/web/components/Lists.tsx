@@ -21,6 +21,7 @@ import { getLists, type ListEntry, saveLists } from "../offlineDb";
 import { patchListName } from "../patchListName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
+import ThemeChooser from "./ThemeChooser";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
@@ -206,7 +207,7 @@ export default function Lists({
     : null;
 
   return (
-    <div className="screen">
+    <div className="screen screen--home">
       {filterActive ? (
         <ul className="list">
           {filteredLists.map((entry) => (
@@ -308,6 +309,11 @@ export default function Lists({
           </div>
         </div>
       )}
+
+      <div className="links-list-theme links-list-theme--home">
+        <p className="links-list-theme-label">Appearance</p>
+        <ThemeChooser />
+      </div>
 
       {!creating && (
         <button type="button" className="fab" onClick={() => setCreating(true)}>

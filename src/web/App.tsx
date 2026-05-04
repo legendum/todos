@@ -6,10 +6,12 @@ import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
 import { listFromTodoJson, type TodoListJson } from "./listFromJson";
 import { findListInCache, type ListEntry } from "./offlineDb";
+import { reconcileTheme } from "./theme";
 
 type User = {
   legendum_linked: boolean;
   hosted: boolean;
+  meta?: { theme?: unknown };
 };
 
 /** Extract slug from the current URL path. Returns null if at root. */
@@ -61,6 +63,7 @@ export default function App() {
         return;
       }
       const data = (await res.json()) as User;
+      reconcileTheme(data.meta?.theme);
       setUser(data);
     } catch {
       setUser(null);

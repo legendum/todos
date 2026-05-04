@@ -401,6 +401,9 @@ export default {
     if (path === "/t/settings/me" && method === "GET") {
       return settingsHandlers.getMe(userId);
     }
+    if (path === "/t/settings/me" && method === "PATCH") {
+      return await settingsHandlers.patchMe(req, userId);
+    }
     if (path === "/t/lists/events" && method === "GET") {
       return listHandlers.sseListsStream(userId, req.signal);
     }
