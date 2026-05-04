@@ -22,6 +22,7 @@ import { patchListName } from "../patchListName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
 import ThemeChooser from "./ThemeChooser";
+import { useEscape } from "./useEscape";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
@@ -130,6 +131,12 @@ export default function Lists({
     });
     return () => es.close();
   }, [visible, online]);
+
+  useEscape(creating, () => {
+    setCreating(false);
+    setNewName("");
+    setError(null);
+  });
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
