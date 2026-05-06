@@ -1,7 +1,8 @@
 ---
 name: todos
 description: >-
-  Sync todos with todos.in via TODOS_WEBHOOK in .env: run `todos`, edit
+  Sync todos with todos.in (webhook from `.env`, `$TODOS_WEBHOOK`, or `todos -w
+  URL`): run `todos`, edit
   todos.md (freeform Markdown + task lists), run `todos` again after changes.
   Read the whole file for planning context, not only checkboxes.
 ---
@@ -10,7 +11,7 @@ description: >-
 
 ## Sync workflow
 
-1. Ensure `.env` has `TODOS_WEBHOOK`, or prompt the user to add it (from the list on [todos.in](https://todos.in)).
+1. Ensure a webhook is configured: `TODOS_WEBHOOK` in `.env`, exported `TODOS_WEBHOOK`, or `todos -w <url>` for that run.
 2. To sync and list todos, run `todos` — this updates `todos.md` from the server.
 3. Edit `todos.md` using standard Markdown task lists: `- [ ] undone task` or `- [x] completed task`. **Freeform Markdown outside task lists is supported** (planning prose, links, headings).
 4. Run `todos` again to push local changes to the server (if any).

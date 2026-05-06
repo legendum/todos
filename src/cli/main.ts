@@ -19,12 +19,45 @@ import { parseContent, purgeDoneTodos, serializeContent } from "../lib/todos";
 const TODOS_FILE = "todos.md";
 
 /** Read TODOS_WEBHOOK from .env in the current directory. */
-function getWebhookUrl(): string | null {
+function getWebhookUrlFromEnvFile(): string | null {
   const envPath = join(process.cwd(), ".env");
   if (!existsSync(envPath)) return null;
   const content = readFileSync(envPath, "utf-8");
   const match = content.match(/^TODOS_WEBHOOK=(.+)$/m);
   return match?.[1]?.trim() || null;
+}
+
+/** Strip `-w` / `--webhook` from argv; last flag wins. */
+function parseWebhookFlags(argv: string[]): {
+  webhook: string | null;
+  rest: string[];
+} {
+  const rest: string[] = [];
+  let webhook: string | null = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "-w" || a === "--webhook") {
+      const next = argv[i + 1];
+      if (!next || next.startsWith("-")) {
+        console.error("todos: -w / --webhook requires a URL");
+        process.exit(1);
+      }
+      webhook = next;
+      i++;
+      continue;
+    }
+    if (a.startsWith("--webhook=")) {
+      const v = a.slice("--webhook=".length).trim();
+      if (!v) {
+        console.error("todos: --webhook= requires a non-empty URL");
+        process.exit(1);
+      }
+      webhook = v;
+      continue;
+    }
+    rest.push(a);
+  }
+  return { webhook, rest };
 }
 
 /** Prompt user for webhook URL and save to .env */
@@ -146,11 +179,15 @@ Usage:
   todos skill              install agent skill for Claude Code / Cursor
   todos help               show this message
 
-First run: set TODOS_WEBHOOK in .env or you will be prompted.
+Options:
+  -w URL, --webhook URL    use this webhook for this run only (--webhook=URL ok)
+
+Webhook resolution: -w flag, then TODOS_WEBHOOK in .env, then $TODOS_WEBHOOK,
+then interactive prompt.
 
 Webhook URL: open https://todos.in, choose a todo list, then tap or click the
-/w/… line under the list name at the top — it copies the webhook to your
-clipboard. Paste that into TODOS_WEBHOOK in your project .env.
+identifier line under the list name at the top — it copies the webhook to your
+clipboard. Paste that into .env, pass -w, or export TODOS_WEBHOOK.
 `);
 }
 
@@ -179,7 +216,8 @@ async function fetchWebhookDocHistory(
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const rawArgv = process.argv.slice(2);
+  const { webhook: webhookFromFlag, rest: args } = parseWebhookFlags(rawArgv);
   if (
     args.length === 1 &&
     (args[0] === "--help" ||
@@ -190,7 +228,11 @@ async function main() {
     return;
   }
 
-  let webhookUrl = getWebhookUrl();
+  let webhookUrl =
+    webhookFromFlag?.trim() ||
+    getWebhookUrlFromEnvFile() ||
+    process.env.TODOS_WEBHOOK?.trim() ||
+    null;
   if (!webhookUrl) {
     webhookUrl = promptWebhookUrl();
   }
