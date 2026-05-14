@@ -6,7 +6,7 @@ import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
 import { listFromTodoJson, type TodoListJson } from "./listFromJson";
 import { findListInCache, type ListEntry } from "./offlineDb";
-import { reconcileTheme } from "./theme";
+import { reconcileTheme } from "pues/base/theme";
 
 type User = {
   legendum_linked: boolean;

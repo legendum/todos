@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { syncMarkdownAfterReconnect } from "./syncMarkdown";
-import "./theme";
+import "pues/base/theme/install";
 
 window.addEventListener("online", () => {
   void syncMarkdownAfterReconnect();

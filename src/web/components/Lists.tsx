@@ -21,7 +21,7 @@ import { getLists, type ListEntry, saveLists } from "../offlineDb";
 import { patchListName } from "../patchListName";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
-import ThemeChooser from "./ThemeChooser";
+import { ThemeChooser } from "pues/base/theme";
 import { useEscape } from "./useEscape";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
@@ -318,8 +318,8 @@ export default function Lists({
       )}
 
       <div className="links-list-theme links-list-theme--home">
-        <p className="links-list-theme-label">Appearance</p>
-        <ThemeChooser />
+        <p className="links-list-theme-label">Theme</p>
+        <ThemeChooser endpoint="/t/settings/me" />
       </div>
 
       {!creating && (
