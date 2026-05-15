@@ -1,27 +1,31 @@
 import {
   DndContext,
   type DragEndEvent,
-  DragOverlay,
-  type DragStartEvent,
   PointerSensor,
   TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  AddButton,
+  type Row,
+  useDndPositions,
+  useResource,
+} from "pues/base/objects";
+import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getLists, type ListEntry, saveLists } from "../offlineDb";
-import { patchListName } from "../patchListName";
+import { useEffect, useMemo, useState } from "react";
+
+import { countTodos } from "../../lib/todos.js";
+import type { ListEntry } from "../offlineDb";
 import DragHandle from "./DragHandle";
 import EditTextDialog from "./EditTextDialog";
-import { ThemeChooser } from "pues/base/theme";
 import { useEscape } from "./useEscape";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
@@ -32,310 +36,197 @@ type Props = {
   visible: boolean;
 };
 
+/**
+ * Adapt a pues row (canonical wire shape + slug/text passthroughs) into the
+ * `ListEntry` shape that the rest of the todos web layer still consumes.
+ */
+function rowToListEntry(row: Row): ListEntry {
+  const text = typeof row.text === "string" ? row.text : "";
+  const { total, done } = countTodos(text);
+  return {
+    name: row.label,
+    slug: typeof row.slug === "string" ? row.slug : "",
+    ulid: String(row.id),
+    position: row.position,
+    total,
+    done,
+    updated_at: typeof row.updated_at === "number" ? row.updated_at : 0,
+  };
+}
+
 export default function Lists({
   onSelect,
   filterQuery,
   filterInputRef,
   visible,
 }: Props) {
-  const [lists, setLists] = useState<ListEntry[]>([]);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [renameList, setRenameList] = useState<ListEntry | null>(null);
+  const resource = useResource("lists");
+  const dnd = useDndPositions({ name: "lists", resource });
+
+  const [renameRow, setRenameRow] = useState<Row | null>(null);
   const [renameText, setRenameText] = useState("");
 
   const filterTrim = filterQuery.trim().toLowerCase();
-  const filteredLists = useMemo(() => {
-    if (!filterTrim) return lists;
-    return lists.filter(
-      (c) =>
-        c.name.toLowerCase().includes(filterTrim) ||
-        c.slug.toLowerCase().includes(filterTrim) ||
-        c.ulid.toLowerCase().includes(filterTrim),
-    );
-  }, [lists, filterTrim]);
-
   const filterActive = filterTrim.length > 0;
+
+  const visibleRows = useMemo(() => {
+    if (!filterActive) return resource.rows;
+    return resource.rows.filter((row) => {
+      const name = row.label.toLowerCase();
+      const slug = (typeof row.slug === "string" ? row.slug : "").toLowerCase();
+      const id = String(row.id).toLowerCase();
+      return (
+        name.includes(filterTrim) ||
+        slug.includes(filterTrim) ||
+        id.includes(filterTrim)
+      );
+    });
+  }, [resource.rows, filterTrim, filterActive]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const fetchLists = useCallback(async () => {
-    try {
-      const res = await fetch("/", {
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as { lists: ListEntry[] };
-      setLists(data.lists);
-      await saveLists(data.lists);
-    } catch {
-      const cached = await getLists();
-      if (cached) setLists(cached);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (visible) fetchLists();
-  }, [visible, fetchLists]);
-
   /** Home list only: move focus to filter so typing narrows the list immediately. */
   useEffect(() => {
+    if (!visible) return;
     const id = requestAnimationFrame(() => {
       filterInputRef.current?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(id);
-  }, []);
+  }, [visible, filterInputRef]);
 
-  useEffect(() => {
-    const onSync = () => {
-      void fetchLists();
-    };
-    window.addEventListener("todos-offline-sync", onSync);
-    return () => window.removeEventListener("todos-offline-sync", onSync);
-  }, [fetchLists]);
+  useEscape(!!renameRow, () => setRenameRow(null));
 
-  const [online, setOnline] = useState(
-    () => typeof navigator !== "undefined" && navigator.onLine,
-  );
-  useEffect(() => {
-    const on = () => setOnline(navigator.onLine);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", on);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", on);
-    };
-  }, []);
-
-  /** Live done/total counts when lists change via webhook/CLI or another tab. */
-  useEffect(() => {
-    if (!visible || !online) return;
-    const es = new EventSource("/t/lists/events");
-    es.addEventListener("lists", (e) => {
-      try {
-        const raw = (e as MessageEvent<string>).data;
-        const data = JSON.parse(raw) as { lists?: ListEntry[] };
-        if (Array.isArray(data.lists)) {
-          setLists(data.lists);
-          void saveLists(data.lists);
-        }
-      } catch {
-        /* ignore malformed */
-      }
-    });
-    return () => es.close();
-  }, [visible, online]);
-
-  useEscape(creating, () => {
-    setCreating(false);
-    setNewName("");
-    setError(null);
-  });
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    setError(null);
-    const res = await fetch("/", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim() }),
-    });
+  const handleDelete = async (row: Row) => {
+    // Optimistic remove — the server echo over SSE is dropped as our own
+    // (X-Op-Id round-trip), so local state must change here, not via SSE.
+    const opId = resource.newOpId();
+    const snapshot = resource.rows;
+    resource.mutate((prev) => prev.filter((r) => r.id !== row.id));
+    const res = await fetch(
+      `/api/lists/${encodeURIComponent(String(row.id))}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-Op-Id": opId },
+      },
+    );
     if (!res.ok) {
-      const data = (await res.json()) as { message?: string };
-      setError(data.message || "Failed to create list");
-      return;
+      resource.mutate(snapshot);
     }
-    setNewName("");
-    setCreating(false);
-    await fetchLists();
-    window.dispatchEvent(new Event("todos-credits-refresh"));
   };
 
-  const handleDelete = async (slug: string) => {
-    await fetch(`/${slug}`, { method: "DELETE", credentials: "include" });
-    await fetchLists();
-  };
-
-  const openRename = (entry: ListEntry) => {
-    setRenameList(entry);
-    setRenameText(entry.name);
+  const openRename = (row: Row) => {
+    setRenameRow(row);
+    setRenameText(row.label);
   };
 
   const saveRename = async () => {
-    if (!renameList) return;
+    if (!renameRow) return;
     const trimmed = renameText.trim();
-    if (!trimmed || trimmed === renameList.name) {
-      setRenameList(null);
+    if (!trimmed || trimmed === renameRow.label) {
+      setRenameRow(null);
       return;
     }
-    const data = await patchListName(renameList.slug, trimmed);
-    if (data) {
-      setRenameList(null);
-      await fetchLists();
+    // Optimistic update — see handleDelete for why.
+    const opId = resource.newOpId();
+    const snapshot = resource.rows;
+    const targetId = renameRow.id;
+    resource.mutate((prev) =>
+      prev.map((r) => (r.id === targetId ? { ...r, label: trimmed } : r)),
+    );
+    setRenameRow(null);
+    const res = await fetch(
+      `/api/lists/${encodeURIComponent(String(targetId))}`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Op-Id": opId,
+        },
+        body: JSON.stringify({ label: trimmed }),
+      },
+    );
+    if (!res.ok) {
+      resource.mutate(snapshot);
     }
   };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragId(String(event.active.id));
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveDragId(null);
-    const { active, over } = event;
-    if (!over) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    if (activeId === overId) return;
-
-    const oldIndex = lists.findIndex((c) => c.slug === activeId);
-    const newIndex = lists.findIndex((c) => c.slug === overId);
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const next = arrayMove(lists, oldIndex, newIndex);
-    setLists(next);
-
-    fetch("/t/reorder", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order: next.map((c) => c.slug) }),
-    });
-  };
-
-  const draggedEntry = activeDragId
-    ? lists.find((c) => c.slug === activeDragId)
-    : null;
 
   return (
     <div className="screen screen--home">
       {filterActive ? (
         <ul className="list">
-          {filteredLists.map((entry) => (
+          {visibleRows.map((row) => (
             <StaticListRow
-              key={entry.slug}
-              entry={entry}
-              onSelect={() => onSelect(entry)}
-              onEdit={() => openRename(entry)}
-              onDelete={() => handleDelete(entry.slug)}
+              key={String(row.id)}
+              row={row}
+              onSelect={() => onSelect(rowToListEntry(row))}
+              onEdit={() => openRename(row)}
+              onDelete={() => void handleDelete(row)}
             />
           ))}
         </ul>
       ) : (
         <DndContext
           sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
+          onDragEnd={dnd.onDragEnd as (e: DragEndEvent) => void}
         >
           <SortableContext
-            items={lists.map((c) => c.slug)}
+            items={visibleRows.map((row) => String(row.id))}
             strategy={verticalListSortingStrategy}
           >
             <ul className="list">
-              {lists.map((entry) => (
+              {visibleRows.map((row) => (
                 <SortableListRow
-                  key={entry.slug}
-                  entry={entry}
-                  onSelect={() => onSelect(entry)}
-                  onEdit={() => openRename(entry)}
-                  onDelete={() => handleDelete(entry.slug)}
+                  key={String(row.id)}
+                  row={row}
+                  onSelect={() => onSelect(rowToListEntry(row))}
+                  onEdit={() => openRename(row)}
+                  onDelete={() => void handleDelete(row)}
                 />
               ))}
             </ul>
           </SortableContext>
-
-          <DragOverlay>
-            {draggedEntry ? (
-              <div className="drag-overlay">
-                <div className="list-item" style={{ borderBottom: "none" }}>
-                  <DragHandle />
-                  <div className="list-item-content">
-                    <div className="list-item-title">{draggedEntry.name}</div>
-                  </div>
-                  <span className="cat-count">
-                    {draggedEntry.done}/{draggedEntry.total}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-          </DragOverlay>
         </DndContext>
       )}
 
-      {lists.length === 0 && !creating && (
+      {!resource.loading && visibleRows.length === 0 && !filterActive && (
         <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
           No todo lists yet. Tap + to create one.
         </p>
       )}
 
-      {lists.length > 0 && filterActive && filteredLists.length === 0 && (
+      {filterActive && visibleRows.length === 0 && (
         <p style={{ padding: 16, color: "#64748b", textAlign: "center" }}>
           No matches.
         </p>
       )}
 
-      {creating && (
-        <div className="form">
-          <input
-            className="input"
-            placeholder="List name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            autoFocus
-          />
-          {error && (
-            <p style={{ color: "#f87171", fontSize: 13, margin: 0 }}>{error}</p>
-          )}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={handleCreate}
-              disabled={!newName.trim()}
-            >
-              Create
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setCreating(false);
-                setNewName("");
-                setError(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <AddButton
+        resource="lists"
+        placeholder="List name"
+        onCreated={(row) => {
+          window.dispatchEvent(new Event("todos-credits-refresh"));
+          onSelect(rowToListEntry(row));
+        }}
+      />
 
       <div className="links-list-theme links-list-theme--home">
         <p className="links-list-theme-label">Theme</p>
         <ThemeChooser endpoint="/t/settings/me" />
       </div>
 
-      {!creating && (
-        <button type="button" className="fab" onClick={() => setCreating(true)}>
-          +
-        </button>
-      )}
-
-      {renameList && (
+      {renameRow && (
         <EditTextDialog
           title="Edit list"
           placeholder="List name"
           text={renameText}
           onChange={setRenameText}
           onSave={saveRename}
-          onClose={() => setRenameList(null)}
+          onClose={() => setRenameRow(null)}
         />
       )}
     </div>
@@ -343,12 +234,12 @@ export default function Lists({
 }
 
 function SortableListRow({
-  entry,
+  row,
   onSelect,
   onEdit,
   onDelete,
 }: {
-  entry: ListEntry;
+  row: Row;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -360,11 +251,14 @@ function SortableListRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: entry.slug });
+  } = useSortable({ id: String(row.id) });
 
   const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
     actionCount: 2,
   });
+
+  const text = typeof row.text === "string" ? row.text : "";
+  const { total, done } = countTodos(text);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -379,10 +273,10 @@ function SortableListRow({
           <div className="list-item" style={{ borderBottom: "none" }}>
             <DragHandle listeners={listeners} />
             <div className="list-item-content" style={{ marginLeft: 8 }}>
-              <div className="list-item-title">{entry.name}</div>
+              <div className="list-item-title">{row.label}</div>
             </div>
             <span className="cat-count">
-              {entry.done}/{entry.total}
+              {done}/{total}
             </span>
           </div>
         </div>
@@ -404,14 +298,14 @@ function SortableListRow({
   );
 }
 
-/** Same row as sortable, without drag — used while the list is filtered (subset reorder would be ambiguous). */
+/** Same row, without drag — used while the list is filtered. */
 function StaticListRow({
-  entry,
+  row,
   onSelect,
   onEdit,
   onDelete,
 }: {
-  entry: ListEntry;
+  row: Row;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -419,6 +313,8 @@ function StaticListRow({
   const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
     actionCount: 2,
   });
+  const text = typeof row.text === "string" ? row.text : "";
+  const { total, done } = countTodos(text);
 
   return (
     <li className="row-wrap">
@@ -436,10 +332,10 @@ function StaticListRow({
               </svg>
             </div>
             <div className="list-item-content" style={{ marginLeft: 8 }}>
-              <div className="list-item-title">{entry.name}</div>
+              <div className="list-item-title">{row.label}</div>
             </div>
             <span className="cat-count">
-              {entry.done}/{entry.total}
+              {done}/{total}
             </span>
           </div>
         </div>

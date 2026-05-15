@@ -1,11 +1,19 @@
 import { join, resolve } from "node:path";
+import { loadPuesConfig, mountResource } from "pues/base/objects";
+import { sseRoute } from "pues/base/sse";
 import { setAuthCookieHeader } from "../lib/auth.js";
-import { closeTabs } from "../lib/billing.js";
+import { chargeListCreate, closeTabs } from "../lib/billing.js";
 import { getDb } from "../lib/db.js";
+import { countListsForUser, MAX_LISTS_PER_USER } from "../lib/listHistory.js";
 import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
 import { seedDefaultListsForNewUser } from "../lib/seed-default-lists.js";
-import { requireAuthAsync } from "./auth-middleware.js";
+import { toSlug, validateListName } from "../lib/todos.js";
+import {
+  getAuthUserIdWithBearer,
+  requireAuthAsync,
+} from "./auth-middleware.js";
 import { json } from "./json.js";
+import { setPuesBroadcast } from "./pues-runtime.js";
 
 const root = resolve(import.meta.dir, "../..");
 
@@ -21,6 +29,99 @@ const legendumSdk = require("../lib/legendum.js");
 getDb();
 
 import { PORT } from "../lib/constants.js";
+
+// --- pues role-mapped resources (SPEC §5) + per-user SSE (SPEC §7) ---
+const puesConfig = await loadPuesConfig();
+const listsResource = puesConfig.resources?.lists;
+if (!listsResource) {
+  throw new Error(
+    "config/pues.yaml: `resources.lists` is required for the /api/lists route.",
+  );
+}
+
+const resolvePuesUser = async (req: Request): Promise<number | null> => {
+  if (isSelfHosted()) {
+    const db = getDb();
+    const row = db.query("SELECT id FROM users LIMIT 1").get() as {
+      id: number;
+    } | null;
+    return row?.id ?? null;
+  }
+  return await getAuthUserIdWithBearer(req);
+};
+
+const puesSse = sseRoute({ resolveUser: resolvePuesUser });
+setPuesBroadcast(puesSse.broadcast);
+
+function rejectJson(status: number, code: string, message: string): Response {
+  return new Response(JSON.stringify({ error: code, message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+const puesRoutes = mountResource({
+  db: getDb(),
+  name: "lists",
+  config: listsResource,
+  resolveUser: resolvePuesUser,
+  broadcast: puesSse.broadcast,
+  beforeInsert: async ({ body, userId }) => {
+    const label = typeof body.label === "string" ? body.label : "";
+    const nameError = validateListName(label);
+    if (nameError) return rejectJson(400, "invalid_request", nameError);
+
+    const slug = toSlug(label);
+    const db = getDb();
+    const dup = db
+      .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?")
+      .get(userId, slug);
+    if (dup) {
+      return rejectJson(
+        400,
+        "invalid_request",
+        `A list with URL "${slug}" already exists`,
+      );
+    }
+
+    if (countListsForUser(userId) >= MAX_LISTS_PER_USER) {
+      return rejectJson(
+        403,
+        "forbidden",
+        `List limit reached (${MAX_LISTS_PER_USER} per account)`,
+      );
+    }
+
+    const chargeError = await chargeListCreate(userId);
+    if (chargeError) return chargeError;
+
+    return { ...body, slug };
+  },
+  beforeUpdate: ({ body, existing, userId }) => {
+    if (typeof body.label !== "string") return body;
+    const trimmed = body.label.trim();
+    if (trimmed === "" || trimmed === existing.label) return body;
+
+    const nameError = validateListName(trimmed);
+    if (nameError) return rejectJson(400, "invalid_request", nameError);
+
+    const newSlug = toSlug(trimmed);
+    if (newSlug === existing.slug) return body;
+
+    const db = getDb();
+    const conflict = db
+      .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ? AND ulid != ?")
+      .get(userId, newSlug, existing.id);
+    if (conflict) {
+      return rejectJson(
+        400,
+        "invalid_request",
+        `A list with URL "${newSlug}" already exists`,
+      );
+    }
+    return { ...body, label: trimmed, slug: newSlug };
+  },
+});
 
 // Legendum middleware for link/unlink
 const legendumMiddleware = legendumSdk.isConfigured()
@@ -184,6 +285,7 @@ async function serveIndex(): Promise<Response> {
     <link rel="apple-touch-icon" href="/todos-192.png" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/pues/theme.css" />
+    <link rel="stylesheet" href="/pues/objects.css" />
     <link rel="stylesheet" href="/main.css" />
   </head>
   <body>
@@ -198,6 +300,10 @@ export default {
   port: PORT,
   development: !!process.env.DEV,
   routes: {
+    // --- pues role-mapped /api/lists (SPEC §5) + per-user /api/events (SPEC §7) ---
+    ...puesRoutes,
+    ...puesSse.routes,
+
     // --- Auth (only mounted in hosted mode; top-level browser nav, no CORS) ---
     ...(legendumSdk.isConfigured()
       ? {
@@ -247,6 +353,8 @@ export default {
     "/main.css": () => serveStatic(join(root, "src/web/main.css"), "text/css"),
     "/pues/theme.css": () =>
       serveStatic(join(root, "pues/base/theme/theme.css"), "text/css"),
+    "/pues/objects.css": () =>
+      serveStatic(join(root, "pues/base/objects/objects.css"), "text/css"),
     "/manifest.json": () =>
       serveStatic(
         join(root, "src/web/manifest.json"),
@@ -391,26 +499,15 @@ export default {
       }
     }
 
-    // --- Unified routes (both modes; same-origin / server-to-server, no CORS) ---
-    if (path === "/" && method === "GET") {
-      return listHandlers.indexLists(userId);
-    }
-    if (path === "/" && method === "POST") {
-      return await listHandlers.createList(req, userId);
-    }
-    if (path === "/t/reorder" && method === "PATCH") {
-      return await listHandlers.reorderLists(req, userId);
-    }
+    // --- Settings (pues mountResource doesn't own `users.meta`) ---
     if (path === "/t/settings/me" && method === "GET") {
       return settingsHandlers.getMe(userId);
     }
     if (path === "/t/settings/me" && method === "PATCH") {
       return await settingsHandlers.patchMe(req, userId);
     }
-    if (path === "/t/lists/events" && method === "GET") {
-      return listHandlers.sseListsStream(userId, req.signal);
-    }
 
+    // --- Markdown editor + doc history (pues owns the row; this owns the text) ---
     const docHist = matchListDocHistory(path, method);
     if (docHist) {
       return docHist.kind === "undo"
@@ -438,12 +535,6 @@ export default {
       }
       if (method === "PUT" || method === "POST") {
         return await listHandlers.replaceTodos(req, slug, userId);
-      }
-      if (method === "PATCH") {
-        return await listHandlers.renameList(req, slug, userId);
-      }
-      if (method === "DELETE") {
-        return listHandlers.deleteList(slug, userId);
       }
     }
 

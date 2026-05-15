@@ -1,0 +1,103 @@
+/* base/objects/objects.css — minimal styling for <ObjectList>.
+ *
+ * Variables-only: all colours/spacing come from --pues-* tokens defined in
+ * base/theme/theme.css. No element selectors, no positional rules.
+ */
+
+.pues-object-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pues-list-gap, 0.5rem);
+}
+
+.pues-object-row {
+  padding: var(--pues-row-padding, 0.75rem 1rem);
+  background: var(--pues-row-bg, transparent);
+  color: var(--pues-fg, inherit);
+  border: 1px solid var(--pues-border, transparent);
+  border-radius: var(--pues-radius, 0.5rem);
+}
+
+.pues-object-row__label {
+  font: inherit;
+  color: inherit;
+}
+
+.pues-object-list__loading,
+.pues-object-list__empty,
+.pues-object-list__error {
+  padding: var(--pues-row-padding, 0.75rem 1rem);
+  color: var(--pues-muted-fg, inherit);
+}
+
+.pues-object-list__error {
+  color: var(--pues-error-fg, #b00);
+}
+
+.pues-add-button {
+  position: fixed;
+  right: var(--pues-fab-offset, 1rem);
+  bottom: var(--pues-fab-offset, 1rem);
+  width: var(--pues-fab-size, 3rem);
+  height: var(--pues-fab-size, 3rem);
+  border-radius: 50%;
+  border: none;
+  background: var(--pues-accent, #1e90ff);
+  color: var(--pues-accent-fg, #fff);
+  font-size: var(--pues-fab-glyph-size, 1.5rem);
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--pues-fab-shadow, 0 2px 8px rgba(0, 0, 0, 0.25));
+}
+
+.pues-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: var(--pues-row-padding, 0.75rem 1rem);
+}
+
+.pues-add-form__input {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--pues-border, #ccc);
+  border-radius: var(--pues-radius, 0.5rem);
+  background: var(--pues-input-bg, transparent);
+  color: inherit;
+}
+
+.pues-add-form__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pues-add-form__submit,
+.pues-add-form__cancel {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--pues-border, #ccc);
+  border-radius: var(--pues-radius, 0.5rem);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pues-add-form__submit {
+  background: var(--pues-accent, #1e90ff);
+  color: var(--pues-accent-fg, #fff);
+  border-color: var(--pues-accent, #1e90ff);
+}
+
+.pues-add-form__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pues-add-form__error {
+  margin: 0;
+  color: var(--pues-error-fg, #b00);
+  font-size: 0.875rem;
+}

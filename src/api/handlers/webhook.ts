@@ -9,7 +9,8 @@ import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
-import { notifyListsChanged, runDocHistoryMutation } from "./lists.js";
+import { broadcastListUpdated } from "../pues-runtime.js";
+import { runDocHistoryMutation } from "./lists.js";
 
 type ListRow = {
   id: number;
@@ -17,8 +18,10 @@ type ListRow = {
   ulid: string;
   name: string;
   slug: string;
+  position: number;
   text: string;
   updated_at: number;
+  created_at: number;
 };
 
 function markdownWebhookResponse(text: string, now: number): Response {
@@ -35,7 +38,7 @@ function findByUlid(ulid: string): ListRow | undefined {
   const db = getDb();
   return db
     .query(
-      "SELECT id, user_id, ulid, name, slug, text, updated_at FROM lists WHERE ulid = ?",
+      "SELECT id, user_id, ulid, name, slug, position, text, updated_at, created_at FROM lists WHERE ulid = ?",
     )
     .get(ulid) as ListRow | undefined;
 }
@@ -80,7 +83,7 @@ export async function replaceWebhookTodos(
   const now = Math.floor(Date.now() / 1000);
   replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(ulid, text);
-  notifyListsChanged(row.user_id);
+  broadcastListUpdated({ ...row, text, updated_at: now });
 
   return markdownWebhookResponse(text, now);
 }

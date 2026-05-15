@@ -1,3 +1,4 @@
+import { reconcileTheme } from "pues/base/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Lists from "./components/Lists";
 import Login from "./components/Login";
@@ -6,7 +7,6 @@ import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
 import { listFromTodoJson, type TodoListJson } from "./listFromJson";
 import { findListInCache, type ListEntry } from "./offlineDb";
-import { reconcileTheme } from "pues/base/theme";
 
 type User = {
   legendum_linked: boolean;

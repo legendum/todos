@@ -1,4 +1,5 @@
 import { shouldFetchMarkdownBody } from "../lib/markdownSyncPolicy.js";
+import { countTodos } from "../lib/todos";
 import {
   getMarkdown,
   getPendingMarkdowns,
@@ -6,6 +7,29 @@ import {
   saveLists,
   saveMarkdown,
 } from "./offlineDb";
+
+type PuesListWire = {
+  id: string;
+  label: string;
+  position: number;
+  updated_at?: number;
+  slug?: string;
+  text?: string;
+};
+
+function wireToListEntry(w: PuesListWire): ListEntry {
+  const text = typeof w.text === "string" ? w.text : "";
+  const { total, done } = countTodos(text);
+  return {
+    name: w.label,
+    slug: typeof w.slug === "string" ? w.slug : "",
+    ulid: w.id,
+    position: w.position,
+    total,
+    done,
+    updated_at: typeof w.updated_at === "number" ? w.updated_at : 0,
+  };
+}
 
 /** Push all pending markdown PUTs, then pull server versions that are newer than our cache. */
 export async function syncMarkdownAfterReconnect(): Promise<void> {
@@ -43,13 +67,13 @@ async function flushPendingMarkdownPuts(): Promise<void> {
 async function pullNewerMarkdownFromServer(): Promise<void> {
   let list: ListEntry[];
   try {
-    const listRes = await fetch("/", {
+    const listRes = await fetch("/api/lists", {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!listRes.ok) return;
-    const data = (await listRes.json()) as { lists: ListEntry[] };
-    list = data.lists;
+    const data = (await listRes.json()) as PuesListWire[];
+    list = data.map(wireToListEntry);
     await saveLists(list);
   } catch {
     return;

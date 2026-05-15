@@ -59,6 +59,29 @@ async function textPut(path: string, body: string) {
   return { status: res.status, body: await res.text(), json: () => res.json() };
 }
 
+/** Create a list via pues' POST /api/lists; returns { status, body } where
+ *  body is the canonical wire row on success or { error, message } on failure. */
+async function createList(label: string) {
+  return await jsonPost("/api/lists", { label });
+}
+
+/** Find a list's pues `id` (= ulid) by its `slug` passthrough. */
+async function findUlidBySlug(slug: string): Promise<string> {
+  const { body } = await jsonGet("/api/lists");
+  const row = (body as Array<{ id: string; slug: string }>).find(
+    (r) => r.slug === slug,
+  );
+  if (!row) throw new Error(`list not found by slug: ${slug}`);
+  return row.id;
+}
+
+/** Delete a list via pues' DELETE /api/lists/:ulid given the slug. */
+async function deleteListBySlug(slug: string): Promise<number> {
+  const ulid = await findUlidBySlug(slug);
+  const res = await fetch(`${base}/api/lists/${ulid}`, { method: "DELETE" });
+  return res.status;
+}
+
 describe("API — self-hosted mode", () => {
   test("GET /t/settings/me returns local user", async () => {
     const { status, body } = await jsonGet("/t/settings/me");
@@ -66,54 +89,66 @@ describe("API — self-hosted mode", () => {
     expect(body.legendum_linked).toBe(false);
   });
 
-  test("POST / creates a list", async () => {
-    const { status, body } = await jsonPost("/", { name: "groceries" });
+  test("POST /api/lists creates a list", async () => {
+    const { status, body } = await createList("groceries");
     expect(status).toBe(201);
-    expect(body.name).toBe("groceries");
+    expect(body.label).toBe("groceries");
     expect(body.slug).toBe("groceries");
-    expect(body.ulid).toBeTruthy();
-    expect(body.webhook_url).toStartWith("/w/");
+    expect(typeof body.id).toBe("string");
   });
 
-  test("POST / creates a list with spaces", async () => {
-    const { status, body } = await jsonPost("/", { name: "My Shopping List" });
+  test("POST /api/lists creates a list with spaces (slug derived in beforeInsert)", async () => {
+    const { status, body } = await createList("My Shopping List");
     expect(status).toBe(201);
-    expect(body.name).toBe("My Shopping List");
+    expect(body.label).toBe("My Shopping List");
     expect(body.slug).toBe("my-shopping-list");
   });
 
-  test("POST / rejects duplicate slug", async () => {
+  test("POST /api/lists rejects duplicate slug", async () => {
     // "my-shopping-list" already exists from the spaces test
-    const { status } = await jsonPost("/", { name: "my shopping list" });
+    const { status } = await createList("my shopping list");
     expect(status).toBe(400);
   });
 
-  test("POST / rejects duplicate list", async () => {
-    const { status } = await jsonPost("/", { name: "groceries" });
+  test("POST /api/lists rejects duplicate list", async () => {
+    const { status } = await createList("groceries");
     expect(status).toBe(400);
   });
 
-  test("POST / rejects reserved names", async () => {
-    const { status, body } = await jsonPost("/", { name: "t" });
+  test("POST /api/lists rejects reserved names", async () => {
+    const { status, body } = await createList("t");
     expect(status).toBe(400);
     expect(body.message).toContain("reserved");
   });
 
-  test("GET / lists all lists", async () => {
-    const { status, body } = await jsonGet("/");
+  test("GET /api/lists returns canonical wire shape (pues role-mapping)", async () => {
+    const { status, body } = await jsonGet("/api/lists");
     expect(status).toBe(200);
-    expect(body.lists.length).toBe(4);
-    const bySlug = Object.fromEntries(
-      body.lists.map((c: { slug: string }) => [c.slug, c]),
-    );
-    expect(bySlug.today?.name).toBe("Today");
-    expect(bySlug.ideas?.name).toBe("Ideas");
-    expect(bySlug.groceries?.name).toBe("groceries");
-    expect(typeof bySlug.groceries?.updated_at).toBe("number");
-    expect(bySlug["my-shopping-list"]?.name).toBe("My Shopping List");
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBe(4);
+
+    // Canonical keys: id (from public_id role = ulid), label (from `name`), position
+    for (const row of body) {
+      expect(typeof row.id).toBe("string");           // ulid value under `id`
+      expect(typeof row.label).toBe("string");        // `name` column aliased
+      expect(typeof row.position).toBe("number");
+      expect(typeof row.updated_at).toBe("number");
+      // Passthroughs from todos' schema
+      expect(typeof row.slug).toBe("string");
+      expect(typeof row.text).toBe("string");
+      // Owner column must never leak to the wire
+      expect(row.user_id).toBeUndefined();
+      // Internal pk must never leak under that name
+      expect(row.pk_value).toBeUndefined();
+    }
+
+    // Ordering: position ASC
+    for (let i = 1; i < body.length; i++) {
+      expect(body[i].position).toBeGreaterThanOrEqual(body[i - 1].position);
+    }
   });
 
-  test("GET / list updated_at does not go backwards after PUT", async () => {
+  test("/api/lists updated_at does not go backwards after PUT /:slug text change", async () => {
     const j0 = await fetch(`${base}/groceries.json`, {
       headers: { Accept: "application/json" },
     }).then((r) => r.json() as Promise<{ updated_at: number }>);
@@ -124,11 +159,12 @@ describe("API — self-hosted mode", () => {
       body: "[ ] sync check",
     });
     expect(put.status).toBe(200);
-    const { body } = await jsonGet("/");
-    const groceries = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
+    const { body } = await jsonGet("/api/lists");
+    const groceries = (body as Array<{ slug: string; updated_at: number }>).find(
+      (c) => c.slug === "groceries",
     );
-    expect(groceries.updated_at).toBeGreaterThanOrEqual(t0);
+    expect(groceries).toBeDefined();
+    expect(groceries!.updated_at).toBeGreaterThanOrEqual(t0);
   });
 
   test("GET /:slug works for list with spaces in name", async () => {
@@ -141,9 +177,9 @@ describe("API — self-hosted mode", () => {
     expect(data.slug).toBe("my-shopping-list");
   });
 
-  test("DELETE list with slug", async () => {
-    const res = await fetch(`${base}/my-shopping-list`, { method: "DELETE" });
-    expect(res.status).toBe(200);
+  test("DELETE /api/lists/:ulid removes a list", async () => {
+    const status = await deleteListBySlug("my-shopping-list");
+    expect(status).toBe(204);
   });
 
   test("PUT /:list replaces todos", async () => {
@@ -257,10 +293,7 @@ describe("API — self-hosted mode", () => {
 
   test("webhook GET returns todos", async () => {
     // Get ulid
-    const { body } = await jsonGet("/");
-    const ulid = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
-    ).ulid;
+    const ulid = await findUlidBySlug("groceries");
 
     const res = await fetch(`${base}/w/${ulid}`);
     expect(res.status).toBe(200);
@@ -271,10 +304,7 @@ describe("API — self-hosted mode", () => {
   });
 
   test("webhook PUT replaces todos", async () => {
-    const { body } = await jsonGet("/");
-    const ulid = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
-    ).ulid;
+    const ulid = await findUlidBySlug("groceries");
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "PUT",
@@ -290,10 +320,7 @@ describe("API — self-hosted mode", () => {
   });
 
   test("webhook POST also replaces (same as PUT)", async () => {
-    const { body } = await jsonGet("/");
-    const ulid = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
-    ).ulid;
+    const ulid = await findUlidBySlug("groceries");
 
     const res = await fetch(`${base}/w/${ulid}`, {
       method: "POST",
@@ -312,34 +339,36 @@ describe("API — self-hosted mode", () => {
     expect(res.status).toBe(404);
   });
 
-  test("PATCH /t/reorder reorders lists", async () => {
-    // Create another list
-    await jsonPost("/", { name: "work" });
+  test("PATCH /api/lists/:ulid reorders via {after}", async () => {
+    await createList("work");
 
-    const res = await fetch(`${base}/t/reorder`, {
+    // Initial order: today, ideas, groceries, work — move work to the top
+    // by placing it before today.
+    const workUlid = await findUlidBySlug("work");
+    const todayUlid = await findUlidBySlug("today");
+    const res = await fetch(`${base}/api/lists/${workUlid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        order: ["work", "groceries", "today", "ideas"],
-      }),
+      body: JSON.stringify({ before: todayUlid }),
     });
     expect(res.status).toBe(200);
 
-    const { body } = await jsonGet("/");
-    expect(body.lists[0].name).toBe("work");
-    expect(body.lists[1].name).toBe("groceries");
+    const { body } = await jsonGet("/api/lists");
+    const labels = (body as Array<{ label: string }>).map((r) => r.label);
+    expect(labels[0]).toBe("work");
+    expect(labels[1]).toBe("Today");
   });
 
-  test("DELETE /:list deletes a list", async () => {
-    const res = await fetch(`${base}/work`, { method: "DELETE" });
-    expect(res.status).toBe(200);
+  test("DELETE /api/lists/:ulid removes the row", async () => {
+    const status = await deleteListBySlug("work");
+    expect(status).toBe(204);
 
-    const { body } = await jsonGet("/");
-    expect(body.lists.length).toBe(3);
-    const names = body.lists.map((c: { name: string }) => c.name);
-    expect(names).toContain("groceries");
-    expect(names).toContain("Today");
-    expect(names).toContain("Ideas");
+    const { body } = await jsonGet("/api/lists");
+    expect((body as unknown[]).length).toBe(3);
+    const labels = (body as Array<{ label: string }>).map((r) => r.label);
+    expect(labels).toContain("groceries");
+    expect(labels).toContain("Today");
+    expect(labels).toContain("Ideas");
   });
 
   test("free-form text is preserved", async () => {
@@ -370,53 +399,46 @@ Context: we need to ship by Friday
   });
 
   test("SSE endpoint returns event stream", async () => {
-    const { body } = await jsonGet("/");
-    const ulid = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
-    ).ulid;
-
+    const ulid = await findUlidBySlug("groceries");
     const res = await fetch(`${base}/w/${ulid}/events`);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
   });
 
-  test("GET /t/lists/events returns lists SSE (same auth as app)", async () => {
-    const res = await fetch(`${base}/t/lists/events`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
-    const reader = res.body!.getReader();
-    const { value } = await reader.read();
-    reader.releaseLock();
-    const chunk = new TextDecoder().decode(value);
-    expect(chunk).toContain("event: lists");
-    expect(chunk).toContain("data:");
-    expect(chunk).toContain("groceries");
-  });
-
-  test("PUT /:list pushes a second lists SSE event for subscribers", async () => {
-    const { status: createStatus, body: created } = await jsonPost("/", {
-      name: "sse-put-notify",
-    });
+  test("PUT /:slug pushes a lists.updated event on the pues /api/events stream", async () => {
+    const { status: createStatus, body: created } = await createList(
+      "sse-put-notify",
+    );
     expect(createStatus).toBe(201);
-    const slug = created.slug as string;
+    const slug = (created as { slug: string }).slug;
 
-    const sseRes = await fetch(`${base}/t/lists/events`);
+    const ctrl = new AbortController();
+    const sseRes = await fetch(`${base}/api/events`, { signal: ctrl.signal });
     expect(sseRes.status).toBe(200);
     const reader = sseRes.body!.getReader();
     const dec = new TextDecoder();
     let buf = "";
-    const until = async (pred: () => boolean, ms: number) => {
-      const end = Date.now() + ms;
-      while (!pred() && Date.now() < end) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-      }
-      expect(pred()).toBe(true);
-    };
 
-    await until(() => buf.split("event: lists").length - 1 >= 1, 3000);
-    expect(buf).toContain(slug);
+    // Drain the initial `: connected` comment so the SSE handler's
+    // `start(controller)` has registered this stream before we mutate.
+    {
+      const first = await reader.read();
+      if (first.value) buf += dec.decode(first.value, { stream: true });
+    }
+
+    // Read with a per-poll timeout — reader.read() blocks indefinitely on an
+    // open SSE stream, so a plain while-loop would never exit.
+    const readChunk = async (timeoutMs: number): Promise<boolean> => {
+      const r = await Promise.race([
+        reader.read(),
+        new Promise<{ done: true; value?: undefined }>((res) =>
+          setTimeout(() => res({ done: true }), timeoutMs),
+        ),
+      ]);
+      if (r.done) return false;
+      if (r.value) buf += dec.decode(r.value, { stream: true });
+      return true;
+    };
 
     const put = await fetch(`${base}/${slug}`, {
       method: "PUT",
@@ -425,26 +447,47 @@ Context: we need to ship by Friday
     });
     expect(put.status).toBe(200);
 
-    await until(() => buf.split("event: lists").length - 1 >= 2, 3000);
-    reader.releaseLock();
+    const deadline = Date.now() + 3000;
+    while (
+      !buf.includes("event: lists.updated") &&
+      Date.now() < deadline
+    ) {
+      await readChunk(Math.max(50, deadline - Date.now()));
+    }
 
-    const lastIdx = buf.lastIndexOf("event: lists");
-    const tail = buf.slice(lastIdx);
-    const dataLine = tail.split("\n").find((l) => l.startsWith("data: "));
+    try {
+      reader.releaseLock();
+    } catch {
+      /* already released */
+    }
+    ctrl.abort();
+
+    expect(buf).toContain("event: lists.updated");
+
+    const dataLine = buf
+      .split("\n\n")
+      .reverse()
+      .map((block) => block.split("\n"))
+      .find((lines) => lines.some((l) => l === "event: lists.updated"))!
+      .find((l) => l.startsWith("data: "));
     expect(dataLine).toBeDefined();
     const parsed = JSON.parse(dataLine!.slice(6).trim()) as {
-      lists: Array<{ slug: string; total: number; done: number }>;
+      id: string;
+      label: string;
+      text: string;
+      slug: string;
+      op_id: string | null;
     };
-    const row = parsed.lists.find((l) => l.slug === slug);
-    expect(row).toBeDefined();
-    expect(row!.total).toBe(2);
-    expect(row!.done).toBe(1);
+    expect(parsed.slug).toBe(slug);
+    expect(parsed.text).toBe("[x] one\n[ ] two\n");
+    // Server-initiated mutation (text change via bespoke PUT) carries op_id: null.
+    expect(parsed.op_id).toBeNull();
 
-    await fetch(`${base}/${slug}`, { method: "DELETE" });
+    await deleteListBySlug(slug);
   });
 
   test("markdown task list syntax supported by parser and countTodos", async () => {
-    const create = await jsonPost("/", { name: "markdown-test" });
+    const create = await createList("markdown-test");
     expect(create.status).toBe(201);
 
     const text = `## Markdown Test
@@ -470,14 +513,11 @@ Note with list
     const mdText = await mdRes.text();
     expect(mdText).toBe(text);
 
-    await fetch(`${base}/markdown-test`, { method: "DELETE" });
+    await deleteListBySlug("markdown-test");
   });
 
   test("webhook PUT snapshots then POST undo/redo round-trip", async () => {
-    const { body } = await jsonGet("/");
-    const ulid = body.lists.find(
-      (c: { slug: string }) => c.slug === "groceries",
-    ).ulid;
+    const ulid = await findUlidBySlug("groceries");
 
     const v1 = "[ ] one\n";
     const v2 = "[ ] two\n";
@@ -506,9 +546,9 @@ Note with list
   });
 
   test("POST /w/:ulid/undo returns 409 when stack empty", async () => {
-    const create = await jsonPost("/", { name: "undo-empty-test" });
+    const create = await createList("undo-empty-test");
     expect(create.status).toBe(201);
-    const u = (create.body as { ulid: string }).ulid;
+    const u = (create.body as { id: string }).id;
 
     const r = await fetch(`${base}/w/${u}/undo`, { method: "POST" });
     expect(r.status).toBe(409);
@@ -517,7 +557,7 @@ Note with list
   });
 
   test("POST /:slug/undo and /redo return JSON (session)", async () => {
-    const { status, body } = await jsonPost("/", { name: "slug-history-test" });
+    const { status, body } = await createList("slug-history-test");
     expect(status).toBe(201);
     const slug = (body as { slug: string }).slug;
 
@@ -548,11 +588,11 @@ Note with list
     j = await r.json();
     expect(j.text).toBe(v2);
 
-    await fetch(`${base}/${slug}`, { method: "DELETE" });
+    await deleteListBySlug(slug);
   });
 
   test("POST /:slug/undo returns 409 when stack empty", async () => {
-    const { status, body } = await jsonPost("/", { name: "slug-undo-empty" });
+    const { status, body } = await createList("slug-undo-empty");
     expect(status).toBe(201);
     const slug = (body as { slug: string }).slug;
 
@@ -561,17 +601,17 @@ Note with list
     const j = (await r.json()) as { message?: string };
     expect(j.message).toBeTruthy();
 
-    await fetch(`${base}/${slug}`, { method: "DELETE" });
+    await deleteListBySlug(slug);
   });
 
-  test("POST / rejects 51st list with 403", async () => {
-    const { body } = await jsonGet("/");
-    const start = (body.lists as unknown[]).length;
+  test("POST /api/lists rejects 51st list with 403", async () => {
+    const { body } = await jsonGet("/api/lists");
+    const start = (body as unknown[]).length;
     for (let i = start; i < 50; i++) {
-      const { status } = await jsonPost("/", { name: `cap-fill-${i}` });
+      const { status } = await createList(`cap-fill-${i}`);
       expect(status).toBe(201);
     }
-    const { status, body: b } = await jsonPost("/", { name: "cap-overflow" });
+    const { status, body: b } = await createList("cap-overflow");
     expect(status).toBe(403);
     expect((b as { message?: string }).message).toContain("50");
   });

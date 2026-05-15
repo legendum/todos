@@ -1,27 +1,29 @@
-import { chargeListCreate } from "../../lib/billing.js";
+/**
+ * List handlers — markdown text editor + doc-history undo/redo.
+ *
+ * Index / create / rename / delete / reorder / lists-SSE used to live here.
+ * Those are now served by pues' `mountResource` for `lists` (see
+ * `src/api/server.ts`) and pues' `/api/events` stream. The handlers in this
+ * file are the bespoke paths that pues doesn't own: writing the `text`
+ * passthrough column (the actual list markdown), reading it back, and the
+ * undo/redo stacks that live in separate `undos`/`redos` tables.
+ *
+ * Whenever this file mutates `lists.text`, it broadcasts a canonical
+ * `lists.updated` event via `broadcastListUpdated` so the home page (also
+ * subscribed to `/api/events`) re-renders done/total counts live.
+ */
+
 import { getDb } from "../../lib/db.js";
 import {
   applyRedo,
   applyUndo,
-  countListsForUser,
-  MAX_LISTS_PER_USER,
   replaceListTextWithHistory,
 } from "../../lib/listHistory.js";
 import { isSelfHosted } from "../../lib/mode.js";
-import {
-  broadcast,
-  broadcastUser,
-  SSE_HEARTBEAT_MS,
-  subscribeUser,
-} from "../../lib/sse.js";
-import {
-  countTodos,
-  toSlug,
-  validateListName,
-  validateTodosText,
-} from "../../lib/todos.js";
-import { ulid } from "../../lib/ulid.js";
+import { broadcast } from "../../lib/sse.js";
+import { countTodos, validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
+import { broadcastListUpdated } from "../pues-runtime.js";
 
 type ListRow = {
   id: number;
@@ -35,61 +37,22 @@ type ListRow = {
   updated_at: number;
 };
 
-export type ListsIndexPayload = {
-  lists: Array<{
-    name: string;
-    slug: string;
-    ulid: string;
-    position: number;
-    total: number;
-    done: number;
-    updated_at: number;
-  }>;
-};
-
-/** Same shape as `GET /` JSON — used by index, SSE, and push notifications to clients. */
-export function getListsPayload(userId: number): ListsIndexPayload {
-  const db = getDb();
-  const rows = db
-    .query(
-      "SELECT id, ulid, name, slug, position, text, created_at, updated_at FROM lists WHERE user_id = ? ORDER BY position, id",
-    )
-    .all(userId) as ListRow[];
-
-  const lists = rows.map((r) => {
-    const { total, done } = countTodos(r.text);
-    const updated_at = r.updated_at ?? r.created_at;
-    return {
-      name: r.name,
-      slug: r.slug,
-      ulid: r.ulid,
-      position: r.position,
-      total,
-      done,
-      updated_at,
-    };
-  });
-
-  return { lists };
-}
-
-/** GET / — list all lists */
-export function indexLists(userId: number): Response {
-  return json(getListsPayload(userId));
-}
-
-/** Broadcast updated list summaries to all SSE clients for this user (e.g. after webhook/CLI write). */
-export function notifyListsChanged(userId: number): void {
-  broadcastUser(userId, JSON.stringify(getListsPayload(userId)));
-}
-
 type ListRowDocHistory = Pick<
   ListRow,
-  "id" | "ulid" | "user_id" | "text" | "name" | "slug"
+  | "id"
+  | "ulid"
+  | "user_id"
+  | "text"
+  | "name"
+  | "slug"
+  | "position"
+  | "created_at"
+  | "updated_at"
 >;
 
 /**
- * Apply one document undo/redo step: DB mutation, SSE for list body + index.
+ * Apply one document undo/redo step: DB mutation + SSE for list body (webhook
+ * stream) + SSE for the lists index (pues `/api/events`).
  * Used by webhook and authenticated `POST /:slug/undo|redo`.
  */
 export function runDocHistoryMutation(
@@ -106,179 +69,17 @@ export function runDocHistoryMutation(
     };
   }
   broadcast(row.ulid, result.newText);
-  notifyListsChanged(row.user_id);
+  broadcastListUpdated({
+    ...row,
+    text: result.newText,
+    updated_at: result.now,
+  });
   return {
     ok: true,
     newText: result.newText,
     now: result.now,
     row,
   };
-}
-
-function formatListsSSE(listsJsonLine: string): string {
-  return `event: lists\ndata: ${listsJsonLine}\n\n`;
-}
-
-/** GET /t/lists/events — authenticated SSE: `lists` events with same JSON as GET /. */
-export function sseListsStream(userId: number, signal?: AbortSignal): Response {
-  let unsubscribe: (() => void) | undefined;
-  let onAbort: (() => void) | undefined;
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-
-      const close = () => {
-        if (heartbeat !== undefined) {
-          clearInterval(heartbeat);
-          heartbeat = undefined;
-        }
-        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
-        unsubscribe?.();
-        unsubscribe = undefined;
-        onAbort = undefined;
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      };
-
-      unsubscribe = subscribeUser(userId, (listsJsonLine) => {
-        try {
-          controller.enqueue(encoder.encode(formatListsSSE(listsJsonLine)));
-        } catch {
-          close();
-        }
-      });
-
-      try {
-        controller.enqueue(
-          encoder.encode(
-            formatListsSSE(JSON.stringify(getListsPayload(userId))),
-          ),
-        );
-      } catch {
-        close();
-        return;
-      }
-
-      heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode("\n: keep-alive\n\n"));
-        } catch {
-          close();
-        }
-      }, SSE_HEARTBEAT_MS);
-
-      if (signal) {
-        if (signal.aborted) {
-          close();
-          return;
-        }
-        onAbort = () => close();
-        signal.addEventListener("abort", onAbort);
-      }
-    },
-    cancel() {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
-        heartbeat = undefined;
-      }
-      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
-      unsubscribe?.();
-      unsubscribe = undefined;
-      onAbort = undefined;
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
-}
-
-/** POST / — create list */
-export async function createList(
-  req: Request,
-  userId: number,
-): Promise<Response> {
-  let body: { name?: string };
-  try {
-    body = (await req.json()) as { name?: string };
-  } catch {
-    return json({ error: "invalid_request", message: "Invalid JSON" }, 400);
-  }
-
-  const name = body.name?.trim();
-  const nameError = validateListName(name || "");
-  if (nameError)
-    return json({ error: "invalid_request", message: nameError }, 400);
-
-  const slug = toSlug(name!);
-  const db = getDb();
-
-  // Check uniqueness on slug per user
-  const existing = db
-    .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?")
-    .get(userId, slug);
-  if (existing) {
-    return json(
-      {
-        error: "invalid_request",
-        message: `A list with URL "${slug}" already exists`,
-      },
-      400,
-    );
-  }
-
-  if (countListsForUser(userId) >= MAX_LISTS_PER_USER) {
-    return json(
-      {
-        error: "forbidden",
-        message: "List limit reached (50 per account)",
-      },
-      403,
-    );
-  }
-
-  // Charge for list creation
-  const chargeError = await chargeListCreate(userId);
-  if (chargeError) return chargeError;
-
-  // Get next position
-  const maxPos = db
-    .query(
-      "SELECT COALESCE(MAX(position), -1) as max_pos FROM lists WHERE user_id = ?",
-    )
-    .get(userId) as { max_pos: number };
-
-  const id = ulid();
-  db.run(
-    "INSERT INTO lists (user_id, ulid, name, slug, position) VALUES (?, ?, ?, ?, ?)",
-    userId,
-    id,
-    name,
-    slug,
-    maxPos.max_pos + 1,
-  );
-
-  notifyListsChanged(userId);
-
-  return json(
-    {
-      name,
-      slug,
-      ulid: id,
-      webhook_url: `/w/${id}`,
-      position: maxPos.max_pos + 1,
-    },
-    201,
-  );
 }
 
 /** GET /:slug — get todos (supports content negotiation). `null` means serve SPA HTML. */
@@ -355,7 +156,7 @@ export async function replaceTodos(
   const db = getDb();
   const row = db
     .query(
-      "SELECT id, ulid, name, slug, text, updated_at FROM lists WHERE user_id = ? AND slug = ?",
+      "SELECT id, user_id, ulid, name, slug, position, text, updated_at, created_at FROM lists WHERE user_id = ? AND slug = ?",
     )
     .get(userId, listSlug) as ListRow | undefined;
 
@@ -410,7 +211,7 @@ export async function replaceTodos(
   const now = Math.floor(Date.now() / 1000);
   replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(row.ulid, text);
-  notifyListsChanged(userId);
+  broadcastListUpdated({ ...row, text, updated_at: now });
 
   const { total, done } = countTodos(text);
   return json({
@@ -432,23 +233,13 @@ function postListDocHistory(
   const db = getDb();
   const row = db
     .query(
-      "SELECT id, ulid, name, slug, text, updated_at, user_id FROM lists WHERE user_id = ? AND slug = ?",
+      "SELECT id, user_id, ulid, name, slug, position, text, updated_at, created_at FROM lists WHERE user_id = ? AND slug = ?",
     )
     .get(userId, listSlug) as ListRow | undefined;
 
   if (!row) return json({ error: "not_found", reason: "list" }, 404);
 
-  const step = runDocHistoryMutation(
-    {
-      id: row.id,
-      ulid: row.ulid,
-      user_id: row.user_id,
-      text: row.text,
-      name: row.name,
-      slug: row.slug,
-    },
-    apply,
-  );
+  const step = runDocHistoryMutation(row, apply);
   if (!step.ok) return step.response;
 
   const { total, done } = countTodos(step.newText);
@@ -471,108 +262,4 @@ export function postListUndo(listSlug: string, userId: number): Response {
 /** POST /:slug/redo */
 export function postListRedo(listSlug: string, userId: number): Response {
   return postListDocHistory(listSlug, userId, applyRedo);
-}
-
-/** DELETE /:slug — delete list */
-export function deleteList(listSlug: string, userId: number): Response {
-  const db = getDb();
-  const result = db.run(
-    "DELETE FROM lists WHERE user_id = ? AND slug = ?",
-    userId,
-    listSlug,
-  );
-
-  if (result.changes === 0)
-    return json({ error: "not_found", reason: "list" }, 404);
-  notifyListsChanged(userId);
-  return json({ ok: true });
-}
-
-/** PATCH /:slug — rename list */
-export async function renameList(
-  req: Request,
-  listSlug: string,
-  userId: number,
-): Promise<Response> {
-  let body: { name?: string };
-  try {
-    body = (await req.json()) as { name?: string };
-  } catch {
-    return json({ error: "invalid_request", message: "Invalid JSON" }, 400);
-  }
-
-  const name = body.name?.trim();
-  const nameError = validateListName(name || "");
-  if (nameError)
-    return json({ error: "invalid_request", message: nameError }, 400);
-
-  const newSlug = toSlug(name!);
-  const db = getDb();
-
-  const row = db
-    .query("SELECT id, slug FROM lists WHERE user_id = ? AND slug = ?")
-    .get(userId, listSlug) as ListRow | undefined;
-
-  if (!row) return json({ error: "not_found", reason: "list" }, 404);
-
-  // Check slug uniqueness if slug changed
-  if (newSlug !== row.slug) {
-    const existing = db
-      .query("SELECT 1 FROM lists WHERE user_id = ? AND slug = ?")
-      .get(userId, newSlug);
-    if (existing) {
-      return json(
-        {
-          error: "invalid_request",
-          message: `A list with URL "${newSlug}" already exists`,
-        },
-        400,
-      );
-    }
-  }
-
-  db.run(
-    "UPDATE lists SET name = ?, slug = ? WHERE id = ?",
-    name,
-    newSlug,
-    row.id,
-  );
-
-  notifyListsChanged(userId);
-  return json({ name, slug: newSlug, old_slug: listSlug });
-}
-
-/** PATCH /t/reorder — reorder lists */
-export async function reorderLists(
-  req: Request,
-  userId: number,
-): Promise<Response> {
-  let body: { order?: string[] };
-  try {
-    body = (await req.json()) as { order?: string[] };
-  } catch {
-    return json({ error: "invalid_request", message: "Invalid JSON" }, 400);
-  }
-
-  if (!Array.isArray(body.order)) {
-    return json(
-      {
-        error: "invalid_request",
-        message: "order must be an array of list slugs",
-      },
-      400,
-    );
-  }
-
-  const db = getDb();
-  const stmt = db.prepare(
-    "UPDATE lists SET position = ? WHERE user_id = ? AND slug = ?",
-  );
-
-  for (let i = 0; i < body.order.length; i++) {
-    stmt.run(i, userId, body.order[i]);
-  }
-
-  notifyListsChanged(userId);
-  return json({ ok: true });
 }

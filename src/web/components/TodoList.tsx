@@ -344,7 +344,7 @@ export default function TodoList({
       return;
     }
     const oldSlug = list.slug;
-    const data = await patchListName(oldSlug, trimmed);
+    const data = await patchListName(list.ulid, trimmed);
     if (data) {
       if (data.slug !== oldSlug) {
         const row = await getMarkdown(oldSlug);

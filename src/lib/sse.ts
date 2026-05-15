@@ -1,4 +1,11 @@
-/** Simple SSE broadcaster keyed by list ULID. */
+/**
+ * Per-list SSE for the public webhook stream (`/w/:ulid/events`).
+ *
+ * The home-page / lists-index live stream used to live here too
+ * (`subscribeUser` / `broadcastUser`). That responsibility moved to pues'
+ * `sseRoute()` once todos adopted `mountResource`. What remains is the
+ * per-ulid fan-out the webhook stream needs.
+ */
 
 export const SSE_HEARTBEAT_MS = 20_000;
 
@@ -23,33 +30,5 @@ export function broadcast(ulid: string, text: string): void {
   if (!set) return;
   for (const listener of set) {
     listener(text);
-  }
-}
-
-/** Authenticated home/overview stream — keyed by user id. */
-type UserListsListener = (listsJsonLine: string) => void;
-
-const userListeners = new Map<number, Set<UserListsListener>>();
-
-export function subscribeUser(
-  userId: number,
-  listener: UserListsListener,
-): () => void {
-  if (!userListeners.has(userId)) userListeners.set(userId, new Set());
-  userListeners.get(userId)!.add(listener);
-  return () => {
-    const set = userListeners.get(userId);
-    if (set) {
-      set.delete(listener);
-      if (set.size === 0) userListeners.delete(userId);
-    }
-  };
-}
-
-export function broadcastUser(userId: number, listsJsonLine: string): void {
-  const set = userListeners.get(userId);
-  if (!set) return;
-  for (const listener of set) {
-    listener(listsJsonLine);
   }
 }
