@@ -37,6 +37,12 @@ export type UseResourceOptions = {
   basePath?: string;
   ssePath?: string;
   sseEnabled?: boolean;
+  /** If false, the hook neither fetches nor subscribes to SSE.
+   *  When it flips back to true, the fetch fires (and SSE if
+   *  `sseEnabled` is also true). Useful for gating the resource on
+   *  auth state — defer until the user is loaded so the initial
+   *  request doesn't 401. Defaults to true. */
+  enabled?: boolean;
 };
 
 export function useResource(
@@ -46,6 +52,7 @@ export function useResource(
   const basePath = options.basePath ?? "/api";
   const ssePath = options.ssePath ?? `${basePath}/events`;
   const sseEnabled = options.sseEnabled ?? true;
+  const enabled = options.enabled ?? true;
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +61,10 @@ export function useResource(
   const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     const myTick = ++reloadRef.current;
     setLoading(true);
     setError(null);
@@ -72,7 +83,7 @@ export function useResource(
         setError(e);
         setLoading(false);
       });
-  }, [name, basePath, reloadTick]);
+  }, [name, basePath, reloadTick, enabled]);
 
   const handlers = useMemo(
     () => ({
@@ -113,7 +124,10 @@ export function useResource(
     [name],
   );
 
-  const sse = useSSE(handlers, { path: ssePath, enabled: sseEnabled });
+  const sse = useSSE(handlers, {
+    path: ssePath,
+    enabled: enabled && sseEnabled,
+  });
 
   const mutate: UseResourceResult["mutate"] = useCallback((next) => {
     setRows((prev) =>

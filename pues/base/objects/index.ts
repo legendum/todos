@@ -8,6 +8,8 @@ export {
   resolveColumns,
 } from "./config";
 export { FilterBar, type FilterBarProps } from "./FilterBar";
+export { ObjectDetail, type ObjectDetailProps } from "./ObjectDetail";
+export { RenameTitle, type RenameTitleProps } from "./RenameTitle";
 export {
   type AuthConfig,
   type AuthPolicy,
@@ -49,6 +51,12 @@ export {
   type UseFilterResult,
   useFilter,
 } from "./useFilter";
+export {
+  type RenameOutcome,
+  type UseRenameOptions,
+  type UseRenameResult,
+  useRename,
+} from "./useRename";
 export {
   type Row,
   type UseResourceOptions,

@@ -1,3 +1,4 @@
+import { useResource } from "pues/base/objects";
 import { reconcileTheme } from "pues/base/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Lists from "./components/Lists";
@@ -6,7 +7,13 @@ import TodoList from "./components/TodoList";
 import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
 import { listFromTodoJson, type TodoListJson } from "./listFromJson";
-import { findListInCache, type ListEntry } from "./offlineDb";
+import {
+  deleteMarkdown,
+  findListInCache,
+  getMarkdown,
+  type ListEntry,
+  saveMarkdown,
+} from "./offlineDb";
 
 type User = {
   legendum_linked: boolean;
@@ -54,6 +61,13 @@ export default function App() {
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
   const isSelfHosted = user ? !user.hosted : false;
+
+  // Hoisted resource — single SSE subscription + single fetch shared by
+  // Lists (home) and TodoList (detail). `useRename` inside `<RenameTitle>`
+  // mutates this resource directly, so the home list stays in sync
+  // without any manual prop-callback dance. Gated on `user` so the
+  // initial fetch doesn't 401 before login completes.
+  const resource = useResource("lists", { enabled: !!user });
 
   const fetchUser = useCallback(async () => {
     try {
@@ -109,6 +123,36 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // Reconcile selectedList with the resource. Any rename — home-list
+  // swipe, RenameTitle inline rename, an SSE event from another tab —
+  // updates the row in resource.rows; this effect syncs the detail-page
+  // state + URL, and migrates the offlineDb cache when the slug changes.
+  useEffect(() => {
+    if (!selectedList) return;
+    const row = resource.rows.find(
+      (r) => String(r.id) === selectedList.ulid,
+    );
+    if (!row) return;
+    const newName = row.label;
+    const rowSlug = typeof row.slug === "string" ? row.slug : null;
+    if (!rowSlug) return;
+    if (newName === selectedList.name && rowSlug === selectedList.slug) return;
+    const oldSlug = selectedList.slug;
+    setSelectedList((prev) =>
+      prev ? { ...prev, name: newName, slug: rowSlug } : null,
+    );
+    if (rowSlug !== oldSlug) {
+      window.history.replaceState(null, "", `/${rowSlug}`);
+      void (async () => {
+        const cached = await getMarkdown(oldSlug);
+        if (cached) {
+          await saveMarkdown({ ...cached, slug: rowSlug });
+          await deleteMarkdown(oldSlug);
+        }
+      })();
+    }
+  }, [resource.rows, selectedList]);
+
   const selectList = (entry: ListEntry) => {
     setSelectedList(entry);
     window.history.pushState(null, "", `/${entry.slug}`);
@@ -141,6 +185,7 @@ export default function App() {
       />
       <div style={{ display: selectedList ? "none" : undefined }}>
         <Lists
+          resource={resource}
           onSelect={selectList}
           filterQuery={filterQuery}
           filterInputRef={filterInputRef}
@@ -149,14 +194,11 @@ export default function App() {
       </div>
       {selectedList ? (
         <TodoList
-          key={selectedList.slug}
+          key={selectedList.ulid}
+          resource={resource}
           list={selectedList}
           filterQuery={filterQuery}
           onBack={goBack}
-          onRenamed={({ name, slug }) => {
-            setSelectedList((prev) => (prev ? { ...prev, name, slug } : null));
-            window.history.replaceState(null, "", `/${slug}`);
-          }}
         />
       ) : null}
     </>

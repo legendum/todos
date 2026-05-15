@@ -17,7 +17,8 @@ import {
   type Row,
   useDndPositions,
   useFilter,
-  useResource,
+  useRename,
+  type UseResourceResult,
 } from "pues/base/objects";
 import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
@@ -31,6 +32,7 @@ import { useEscape } from "./useEscape";
 import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
+  resource: UseResourceResult;
   onSelect: (entry: ListEntry) => void;
   filterQuery: string;
   filterInputRef: RefObject<HTMLInputElement | null>;
@@ -69,13 +71,14 @@ function matchListRow(row: Row, query: string): boolean {
 }
 
 export default function Lists({
+  resource,
   onSelect,
   filterQuery,
   filterInputRef,
   visible,
 }: Props) {
-  const resource = useResource("lists");
   const dnd = useDndPositions({ name: "lists", resource });
+  const { rename } = useRename({ resource, resourceName: "lists" });
 
   const [renameRow, setRenameRow] = useState<Row | null>(null);
   const [renameText, setRenameText] = useState("");
@@ -133,29 +136,8 @@ export default function Lists({
       setRenameRow(null);
       return;
     }
-    // Optimistic update — see handleDelete for why.
-    const opId = resource.newOpId();
-    const snapshot = resource.rows;
-    const targetId = renameRow.id;
-    resource.mutate((prev) =>
-      prev.map((r) => (r.id === targetId ? { ...r, label: trimmed } : r)),
-    );
     setRenameRow(null);
-    const res = await fetch(
-      `/api/lists/${encodeURIComponent(String(targetId))}`,
-      {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Op-Id": opId,
-        },
-        body: JSON.stringify({ label: trimmed }),
-      },
-    );
-    if (!res.ok) {
-      resource.mutate(snapshot);
-    }
+    await rename(renameRow.id, trimmed);
   };
 
   return (

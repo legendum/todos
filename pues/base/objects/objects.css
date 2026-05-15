@@ -166,3 +166,86 @@
   background: var(--pues-row-bg-hover, rgba(0, 0, 0, 0.05));
   color: inherit;
 }
+
+/* ObjectDetail — header (back + title-with-inline-rename + actions) + body slot. */
+.pues-object-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Layout only — no padding, no border. Consumers add chrome via
+ * `headerClassName` (e.g. todos passes `screen-header`). */
+.pues-object-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Minimal button reset; consumers add their own styling via `backClassName`
+ * (e.g. todos passes `back-btn`). pues only sets layout-related rules. */
+.pues-object-detail-back {
+  flex-shrink: 0;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.pues-object-detail-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pues-detail-center-gap, 4px);
+}
+.pues-object-detail-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.pues-object-detail-subtitle {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.pues-object-detail-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pues-object-detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* RenameTitle — click-to-edit title. The same `.pues-rename-title` class
+ * is applied to both the button (display state) and the input (edit
+ * state); consumers append their own class to control font/size/color. */
+.pues-rename-title {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+input.pues-rename-title {
+  cursor: text;
+  outline: none;
+  border: 1px solid var(--pues-accent, #1e90ff);
+  border-radius: var(--pues-radius, 0.5rem);
+  background: var(--pues-input-bg, transparent);
+}

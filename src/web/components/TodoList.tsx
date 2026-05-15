@@ -13,14 +13,17 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import {
+  ObjectDetail,
+  RenameTitle,
+  type UseResourceResult,
+} from "pues/base/objects";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  deleteMarkdown,
   getMarkdown,
   type ListEntry,
   saveMarkdown,
 } from "../offlineDb";
-import { patchListName } from "../patchListName";
 import CheckIcon from "./CheckIcon";
 import CopyIcon from "./CopyIcon";
 import { DocHistoryRedoArrow, DocHistoryUndoArrow } from "./DocHistoryArrows";
@@ -42,17 +45,17 @@ import { useOnlineStatus } from "./useOnlineStatus";
 import { usePageTitle } from "./usePageTitle";
 
 type Props = {
+  resource: UseResourceResult;
   list: ListEntry;
   filterQuery: string;
   onBack: () => void;
-  onRenamed: (updated: { name: string; slug: string }) => void;
 };
 
 export default function TodoList({
+  resource,
   list,
   filterQuery,
   onBack,
-  onRenamed,
 }: Props) {
   const [lines, setLines] = useState<Line[]>(() =>
     parseLines(markdownMemCache.get(list.slug) ?? ""),
@@ -62,9 +65,6 @@ export default function TodoList({
   const [editText, setEditText] = useState("");
   const [copied, setCopied] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState(false);
-  const [editName, setEditName] = useState(list.name);
-  const nameInputRef = useRef<HTMLInputElement>(null);
   const addBarRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const initialScrollSlugRef = useRef<string | null>(null);
@@ -107,10 +107,6 @@ export default function TodoList({
           line.isTodo && line.text.toLowerCase().includes(filterTrim),
       );
   }, [lines, filterActive, filterTrim]);
-
-  useEffect(() => {
-    if (!editingName) setEditName(list.name);
-  }, [list.name, list.slug, editingName]);
 
   // On first non-empty render of a newly-opened list, jump to the bottom
   // so the freshest todos are in view. Guarded by slug so edits within the
@@ -328,38 +324,6 @@ export default function TodoList({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const startEditingName = () => {
-    setEditName(list.name);
-    setEditingName(true);
-  };
-
-  const saveName = async () => {
-    const trimmed = editName.trim();
-    if (!trimmed || trimmed === list.name) {
-      setEditingName(false);
-      return;
-    }
-    if (!navigator.onLine) {
-      cancelEditName();
-      return;
-    }
-    const oldSlug = list.slug;
-    const data = await patchListName(list.ulid, trimmed);
-    if (data) {
-      if (data.slug !== oldSlug) {
-        const row = await getMarkdown(oldSlug);
-        if (row) {
-          await saveMarkdown({ ...row, slug: data.slug });
-          await deleteMarkdown(oldSlug);
-        }
-      }
-      setEditingName(false);
-      onRenamed(data);
-    }
-  };
-
-  const cancelEditName = () => setEditingName(false);
-
   function handleDragStart(event: DragStartEvent) {
     setActiveDragId(String(event.active.id));
   }
@@ -387,65 +351,36 @@ export default function TodoList({
     : null;
 
   return (
-    <div className="screen screen--detail">
-      <div className="screen-header">
-        <button className="back-btn" onClick={onBack}>
-          ◀ Back
-        </button>
-        <div className="screen-header-text">
-          {editingName ? (
-            <input
-              ref={nameInputRef}
-              type="text"
-              className="screen-title"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  (e.target as HTMLInputElement).blur();
-                } else if (e.key === "Escape") {
-                  cancelEditName();
-                  nameInputRef.current?.blur();
-                }
-              }}
-              autoFocus
-              style={{
-                display: "block",
-                width: "100%",
-                margin: 0,
-                padding: 0,
-                border: "1px solid #475569",
-                borderRadius: 4,
-                background: "#1e293b",
-                color: "inherit",
-                font: "inherit",
-              }}
-            />
+    <ObjectDetail
+      className="screen screen--detail"
+      headerClassName="screen-header"
+      onBack={onBack}
+      backLabel="◀ Back"
+      backClassName="back-btn"
+      title={
+        <RenameTitle
+          resource={resource}
+          resourceName="lists"
+          rowId={list.ulid}
+          label={list.name}
+          className="screen-title"
+        />
+      }
+      subtitle={
+        <div
+          className="webhook-url"
+          title={copied ? "Copied to clipboard" : "Click to copy webhook URL"}
+          onClick={copyWebhookUrl}
+        >
+          {list.ulid}
+          {copied ? (
+            <span className="copied-badge">Copied!</span>
           ) : (
-            <h2
-              className="screen-title"
-              title="Click to rename list"
-              onClick={startEditingName}
-              style={{ cursor: "pointer" }}
-            >
-              {list.name}
-            </h2>
+            <CopyIcon />
           )}
-          <div
-            className="webhook-url"
-            title={copied ? "Copied to clipboard" : "Click to copy webhook URL"}
-            onClick={copyWebhookUrl}
-          >
-            {list.ulid}
-            {copied ? (
-              <span className="copied-badge">Copied!</span>
-            ) : (
-              <CopyIcon />
-            )}
-          </div>
         </div>
+      }
+      actions={
         <div className="header-doc-history">
           <button
             type="button"
@@ -468,8 +403,8 @@ export default function TodoList({
             <DocHistoryRedoArrow />
           </button>
         </div>
-      </div>
-
+      }
+    >
       {history.error ? (
         <div className="history-error-banner" role="status">
           {history.error}
@@ -598,6 +533,6 @@ export default function TodoList({
           onClose={() => setEditingIndex(null)}
         />
       )}
-    </div>
+    </ObjectDetail>
   );
 }
