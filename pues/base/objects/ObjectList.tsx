@@ -10,7 +10,6 @@
  * left).
  */
 
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import {
   DndContext,
   type DragEndEvent,
@@ -25,9 +24,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-import { useResource, type Row } from "./useResource";
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { useDndPositions } from "./useDndPositions";
+import { type Row, useResource } from "./useResource";
 
 export type RowRenderContext = {
   row: Row;
@@ -77,16 +76,28 @@ export function ObjectList({
 
   if (r.loading) {
     return (
-      <>{loadingFallback ?? <div className="pues-object-list__loading">Loading…</div>}</>
+      <>
+        {loadingFallback ?? (
+          <div className="pues-object-list__loading">Loading…</div>
+        )}
+      </>
     );
   }
   if (r.error) {
     return (
-      <>{errorFallback ? errorFallback(r.error) : <div className="pues-object-list__error">{r.error.message}</div>}</>
+      <>
+        {errorFallback ? (
+          errorFallback(r.error)
+        ) : (
+          <div className="pues-object-list__error">{r.error.message}</div>
+        )}
+      </>
     );
   }
   if (r.rows.length === 0) {
-    return <>{empty ?? <div className="pues-object-list__empty">No items</div>}</>;
+    return (
+      <>{empty ?? <div className="pues-object-list__empty">No items</div>}</>
+    );
   }
 
   if (!sortable) {
@@ -102,8 +113,14 @@ export function ObjectList({
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={dnd.onDragEnd as (e: DragEndEvent) => void}>
-      <SortableContext items={dnd.itemIds.map(String)} strategy={verticalListSortingStrategy}>
+    <DndContext
+      sensors={sensors}
+      onDragEnd={dnd.onDragEnd as (e: DragEndEvent) => void}
+    >
+      <SortableContext
+        items={dnd.itemIds.map(String)}
+        strategy={verticalListSortingStrategy}
+      >
         <ul className="pues-object-list">
           {r.rows.map((row) => (
             <SortableObjectRow

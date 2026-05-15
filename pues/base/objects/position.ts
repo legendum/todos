@@ -151,7 +151,7 @@ function renumberScope(
   const SENTINEL: unknown = Symbol("moving");
   const moving = movingPk ?? SENTINEL;
   const remaining = rows.map((r) => r.pk).filter((pk) => pk !== movingPk);
-  const anchorIdx = remaining.findIndex((pk) => pk === anchorPk);
+  const anchorIdx = remaining.indexOf(anchorPk);
   if (anchorIdx === -1) {
     throw new Error("[pues] renumber: anchor missing after move-removal");
   }

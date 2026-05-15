@@ -12,7 +12,10 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { newId } from "../objects/newId";
 
-export type SseEventHandler = (data: unknown, opts: { op_id: string | null }) => void;
+export type SseEventHandler = (
+  data: unknown,
+  opts: { op_id: string | null },
+) => void;
 
 export type UseSSEOptions = {
   path?: string;
@@ -44,7 +47,8 @@ export function useSSE(
 
   useEffect(() => {
     if (!enabled) return;
-    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    if (typeof window === "undefined" || typeof EventSource === "undefined")
+      return;
     const es = new EventSource(path, { withCredentials: true });
 
     const dispatch = (name: string) => (ev: MessageEvent<string>) => {

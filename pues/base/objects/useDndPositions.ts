@@ -12,11 +12,11 @@
  * the echo so optimistic UI doesn't flicker.
  */
 
-import { useCallback, useMemo } from "react";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
+import { useCallback, useMemo } from "react";
 
-import type { Row, UseResourceResult } from "./useResource";
+import type { UseResourceResult } from "./useResource";
 
 export type UseDndPositionsArgs = {
   name: string;

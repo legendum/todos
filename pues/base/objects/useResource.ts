@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useSSE, type UseSSEResult } from "../sse/useSSE";
+import { type UseSSEResult, useSSE } from "../sse/useSSE";
 
 export type Row = {
   id: string | number;
@@ -87,11 +87,19 @@ export function useResource(
       [`${name}.reordered`]: (data: unknown) => {
         if (!data || typeof data !== "object") return;
         const { id, position } = data as { id?: unknown; position?: unknown };
-        if (typeof position !== "number" || (typeof id !== "string" && typeof id !== "number")) return;
+        if (
+          typeof position !== "number" ||
+          (typeof id !== "string" && typeof id !== "number")
+        )
+          return;
         setRows((prev) =>
           insertSorted(
             prev.filter((r) => r.id !== id),
-            { ...(prev.find((r) => r.id === id) ?? ({ id, label: "", position } as Row)), position },
+            {
+              ...(prev.find((r) => r.id === id) ??
+                ({ id, label: "", position } as Row)),
+              position,
+            },
           ),
         );
       },
@@ -119,11 +127,7 @@ export function useResource(
 
 function isRow(v: unknown): v is Row {
   return (
-    !!v &&
-    typeof v === "object" &&
-    "id" in v &&
-    "label" in v &&
-    "position" in v
+    !!v && typeof v === "object" && "id" in v && "label" in v && "position" in v
   );
 }
 

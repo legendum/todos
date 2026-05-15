@@ -20,9 +20,9 @@ import type { Database } from "bun:sqlite";
 
 import {
   quoteIdent,
-  resolveColumns,
   type ResolvedColumns,
   type ResourceConfig,
+  resolveColumns,
 } from "./config";
 import { newId as defaultNewId } from "./newId";
 import {
@@ -171,7 +171,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
         });
         if (hookResult instanceof Response) return hookResult;
         if (!hookResult || typeof hookResult !== "object") {
-          return jsonError(500, "beforeInsert must return an object or Response");
+          return jsonError(
+            500,
+            "beforeInsert must return an object or Response",
+          );
         }
         effectiveBody = hookResult;
       } catch (err) {
@@ -191,7 +194,8 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       cols.position,
     ];
     const labelToInsert =
-      typeof effectiveBody.label === "string" && effectiveBody.label.trim() !== ""
+      typeof effectiveBody.label === "string" &&
+      effectiveBody.label.trim() !== ""
         ? String(effectiveBody.label).trim()
         : String(body.label).trim();
     const insertBinds: unknown[] = [ownerId, id, labelToInsert, position];
@@ -265,7 +269,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
         });
         if (hookResult instanceof Response) return hookResult;
         if (!hookResult || typeof hookResult !== "object") {
-          return jsonError(500, "beforeUpdate must return an object or Response");
+          return jsonError(
+            500,
+            "beforeUpdate must return an object or Response",
+          );
         }
         effectiveBody = hookResult;
       } catch (err) {
@@ -279,7 +286,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     let reorderRenumber: Array<{ pk: unknown; position: number }> = [];
     let didReorder = false;
 
-    if (typeof effectiveBody.label === "string" && effectiveBody.label.trim() !== "") {
+    if (
+      typeof effectiveBody.label === "string" &&
+      effectiveBody.label.trim() !== ""
+    ) {
       setCols.push(cols.label);
       setBinds.push(String(effectiveBody.label).trim());
     }
@@ -308,7 +318,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       setBinds.push(r.newPosition);
       reorderRenumber = r.renumber;
       didReorder = true;
-    } else if (typeof body.after === "string" || typeof body.after === "number") {
+    } else if (
+      typeof body.after === "string" ||
+      typeof body.after === "number"
+    ) {
       const r = computeRelativePosition(
         args.db,
         cols,
@@ -321,7 +334,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       setBinds.push(r.newPosition);
       reorderRenumber = r.renumber;
       didReorder = true;
-    } else if (typeof body.position === "number" && Number.isFinite(body.position)) {
+    } else if (
+      typeof body.position === "number" &&
+      Number.isFinite(body.position)
+    ) {
       setCols.push(cols.position);
       setBinds.push(Math.floor(body.position));
       didReorder = true;
@@ -407,9 +423,14 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (!existing) return jsonError(404, "not_found");
     const sql = `DELETE FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ? AND ${q(cols.owner)} = ?`;
     args.db.run(sql, existing.pk_value, ownerId);
-    broadcast?.(ownerId as number, `${resourceName}.deleted`, { id: publicId }, {
-      op_id: opId,
-    });
+    broadcast?.(
+      ownerId as number,
+      `${resourceName}.deleted`,
+      { id: publicId },
+      {
+        op_id: opId,
+      },
+    );
     return new Response(null, { status: 204 });
   };
 
@@ -421,8 +442,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
 
 function buildSelectSql(cols: ResolvedColumns, getPolicy: AuthPolicy): string {
   const parts = baseSelectParts(cols);
-  const where =
-    getPolicy === "user" ? `WHERE ${q(cols.owner)} = ?` : "";
+  const where = getPolicy === "user" ? `WHERE ${q(cols.owner)} = ?` : "";
   const orderBy = `ORDER BY ${q(cols.position)} ASC, ${q(cols.pk)} ASC`;
   return `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ${where} ${orderBy} LIMIT ? OFFSET ?`;
 }
@@ -456,10 +476,7 @@ function parsePagination(urlStr: string): { limit: number; offset: number } {
   const off = rawOffset == null ? 0 : Number(rawOffset);
   const limit = Math.max(
     1,
-    Math.min(
-      MAX_LIMIT,
-      Number.isFinite(lim) ? Math.floor(lim) : DEFAULT_LIMIT,
-    ),
+    Math.min(MAX_LIMIT, Number.isFinite(lim) ? Math.floor(lim) : DEFAULT_LIMIT),
   );
   const offset = Math.max(0, Number.isFinite(off) ? Math.floor(off) : 0);
   return { limit, offset };

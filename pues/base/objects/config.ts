@@ -47,7 +47,13 @@ export type ResolvedColumns = {
   timestamp_format: "unix" | "iso";
 };
 
-const REQUIRED_ROLES = ["pk", "public_id", "owner", "label", "position"] as const;
+const REQUIRED_ROLES = [
+  "pk",
+  "public_id",
+  "owner",
+  "label",
+  "position",
+] as const;
 const OPTIONAL_ROLES = ["updated_at", "created_at", "meta"] as const;
 const ALL_ROLES = [...REQUIRED_ROLES, ...OPTIONAL_ROLES] as const;
 
@@ -111,7 +117,10 @@ export function resolveColumns(
   }
   const actual = new Set(info.map((r) => r.name));
 
-  const explicit = (cfg.columns ?? {}) as Record<string, string | null | undefined>;
+  const explicit = (cfg.columns ?? {}) as Record<
+    string,
+    string | null | undefined
+  >;
   const mapped: Record<string, string | null> = {};
 
   for (const role of ALL_ROLES) {

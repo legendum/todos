@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from "react";
 
-import { useResource, type Row } from "./useResource";
+import { type Row, useResource } from "./useResource";
 
 export type AddButtonProps = {
   resource: string;
