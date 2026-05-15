@@ -41,10 +41,8 @@ type Props = {
  * `ListEntry` shape that the rest of the todos web layer still consumes.
  */
 function rowToListEntry(row: Row): ListEntry {
-  const done =
-    typeof row.done === "number" && Number.isFinite(row.done) ? row.done : 0;
-  const total =
-    typeof row.total === "number" && Number.isFinite(row.total) ? row.total : 0;
+  const text = typeof row.text === "string" ? row.text : "";
+  const { total, done } = countTodos(text);
   return {
     name: row.label,
     slug: typeof row.slug === "string" ? row.slug : "",
@@ -56,20 +54,13 @@ function rowToListEntry(row: Row): ListEntry {
   };
 }
 
-/** Display-only projection for home-list rows; never persisted. */
-function rowWithCounts(row: Row): Row {
-  const text = typeof row.text === "string" ? row.text : "";
-  const { total, done } = countTodos(text);
-  return { ...row, total, done };
-}
-
 export default function Lists({
   onSelect,
   filterQuery,
   filterInputRef,
   visible,
 }: Props) {
-  const resource = useResource("lists", { deriveRow: rowWithCounts });
+  const resource = useResource("lists");
   const dnd = useDndPositions({ name: "lists", resource });
 
   const [renameRow, setRenameRow] = useState<Row | null>(null);
