@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type UseSSEResult, useSSE } from "../sse/useSSE";
+import { deriveResourceRow, deriveResourceRows } from "./derive";
 
 export type Row = {
   id: string | number;
@@ -37,6 +38,8 @@ export type UseResourceOptions = {
   basePath?: string;
   ssePath?: string;
   sseEnabled?: boolean;
+  /** Optional display-only projection applied to every row update. */
+  deriveRow?: (row: Row) => Row;
 };
 
 export function useResource(
@@ -46,12 +49,22 @@ export function useResource(
   const basePath = options.basePath ?? "/api";
   const ssePath = options.ssePath ?? `${basePath}/events`;
   const sseEnabled = options.sseEnabled ?? true;
+  const deriveRow = options.deriveRow;
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const reloadRef = useRef(0);
   const [reloadTick, setReloadTick] = useState(0);
+
+  const applyDerived = useCallback(
+    (row: Row): Row => deriveResourceRow(row, deriveRow),
+    [deriveRow],
+  );
+  const applyDerivedAll = useCallback(
+    (nextRows: Row[]): Row[] => deriveResourceRows(nextRows, deriveRow),
+    [deriveRow],
+  );
 
   useEffect(() => {
     const myTick = ++reloadRef.current;
@@ -64,7 +77,7 @@ export function useResource(
       })
       .then((data: Row[]) => {
         if (myTick !== reloadRef.current) return;
-        setRows(Array.isArray(data) ? data : []);
+        setRows(applyDerivedAll(Array.isArray(data) ? data : []));
         setLoading(false);
       })
       .catch((e: Error) => {
@@ -72,17 +85,17 @@ export function useResource(
         setError(e);
         setLoading(false);
       });
-  }, [name, basePath, reloadTick]);
+  }, [name, basePath, reloadTick, applyDerivedAll]);
 
   const handlers = useMemo(
     () => ({
       [`${name}.created`]: (data: unknown) => {
         if (!isRow(data)) return;
-        setRows((prev) => insertSorted(prev, stripOpId(data)));
+        setRows((prev) => insertSorted(prev, applyDerived(stripOpId(data))));
       },
       [`${name}.updated`]: (data: unknown) => {
         if (!isRow(data)) return;
-        setRows((prev) => replaceById(prev, stripOpId(data)));
+        setRows((prev) => replaceById(prev, applyDerived(stripOpId(data))));
       },
       [`${name}.reordered`]: (data: unknown) => {
         if (!data || typeof data !== "object") return;
@@ -95,11 +108,11 @@ export function useResource(
         setRows((prev) =>
           insertSorted(
             prev.filter((r) => r.id !== id),
-            {
+            applyDerived({
               ...(prev.find((r) => r.id === id) ??
                 ({ id, label: "", position } as Row)),
               position,
-            },
+            }),
           ),
         );
       },
@@ -110,16 +123,23 @@ export function useResource(
         setRows((prev) => prev.filter((r) => r.id !== id));
       },
     }),
-    [name],
+    [name, applyDerived],
   );
 
   const sse = useSSE(handlers, { path: ssePath, enabled: sseEnabled });
 
-  const mutate: UseResourceResult["mutate"] = useCallback((next) => {
-    setRows((prev) =>
-      typeof next === "function" ? (next as (p: Row[]) => Row[])(prev) : next,
-    );
-  }, []);
+  const mutate: UseResourceResult["mutate"] = useCallback(
+    (next) => {
+      setRows((prev) =>
+        applyDerivedAll(
+          typeof next === "function"
+            ? (next as (p: Row[]) => Row[])(prev)
+            : next,
+        ),
+      );
+    },
+    [applyDerivedAll],
+  );
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
 
   return { rows, loading, error, mutate, reload, newOpId: sse.newOpId };
