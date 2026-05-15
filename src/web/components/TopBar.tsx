@@ -1,3 +1,4 @@
+import { FilterBar } from "pues/base/objects";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import InstallDialog from "./InstallDialog";
@@ -109,52 +110,15 @@ export default function TopBar({
             style={{ width: 28, height: 28, borderRadius: 6 }}
           />
         </button>
-        <label
-          className="list-filter topbar-search-filter"
-          htmlFor="todos-list-filter"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="list-filter-icon" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <circle
-                cx="11"
-                cy="11"
-                r="7"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M20 20l-3-3"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <input
-            ref={filterInputRef}
-            id="todos-list-filter"
-            type="search"
-            className="list-filter-input"
-            placeholder="Filter..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="Filter lists by name or slug"
-            enterKeyHint="search"
-          />
-          {filterQuery ? (
-            <button
-              type="button"
-              className="list-filter-clear"
-              onClick={() => setFilterQuery("")}
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          ) : null}
-        </label>
+        <FilterBar
+          query={filterQuery}
+          setQuery={setFilterQuery}
+          inputRef={filterInputRef}
+          placeholder="Filter..."
+          ariaLabel="Filter lists by name or slug"
+          id="todos-list-filter"
+          className="topbar-search-filter"
+        />
       </div>
       {!isSelfHosted && linkController && (
         <div className="topbar-right">

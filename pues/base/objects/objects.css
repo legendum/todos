@@ -101,3 +101,68 @@
   color: var(--pues-error-fg, #b00);
   font-size: 0.875rem;
 }
+
+/* FilterBar — controlled filter input chrome. Pair with useFilter for logic. */
+.pues-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 12px;
+  min-height: 44px;
+  background: var(--pues-input-bg, transparent);
+  border: 1px solid var(--pues-border, #ccc);
+  border-radius: var(--pues-radius, 0.5rem);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.pues-filter-bar:focus-within {
+  border-color: var(--pues-accent, #1e90ff);
+  box-shadow: 0 0 0 1px var(--pues-accent-glow, rgba(30, 144, 255, 0.3));
+}
+.pues-filter-bar-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--pues-muted-fg, currentColor);
+}
+.pues-filter-bar-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+.pues-filter-bar-input::placeholder {
+  color: var(--pues-muted-fg, currentColor);
+  opacity: 0.7;
+}
+.pues-filter-bar-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pues-filter-bar-clear {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 -4px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--pues-radius, 0.5rem);
+  background: transparent;
+  color: var(--pues-muted-fg, currentColor);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pues-filter-bar-clear:hover {
+  background: var(--pues-row-bg-hover, rgba(0, 0, 0, 0.05));
+  color: inherit;
+}

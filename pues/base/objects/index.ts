@@ -7,6 +7,7 @@ export {
   type ResourceConfig,
   resolveColumns,
 } from "./config";
+export { FilterBar, type FilterBarProps } from "./FilterBar";
 export {
   type AuthConfig,
   type AuthPolicy,
@@ -42,6 +43,12 @@ export {
   type UseDndPositionsResult,
   useDndPositions,
 } from "./useDndPositions";
+export {
+  applyFilter,
+  type FilterPredicate,
+  type UseFilterResult,
+  useFilter,
+} from "./useFilter";
 export {
   type Row,
   type UseResourceOptions,

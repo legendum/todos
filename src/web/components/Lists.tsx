@@ -16,11 +16,12 @@ import {
   AddButton,
   type Row,
   useDndPositions,
+  useFilter,
   useResource,
 } from "pues/base/objects";
 import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { countTodos } from "../../lib/todos.js";
 import type { ListEntry } from "../offlineDb";
@@ -54,6 +55,19 @@ function rowToListEntry(row: Row): ListEntry {
   };
 }
 
+/** Module-level so its identity is stable across renders (avoids needless
+ * useFilter recomputation). Matches the canonical label + the `slug` and
+ * `id` passthroughs. */
+function matchListRow(row: Row, query: string): boolean {
+  const q = query.toLowerCase();
+  const slug = typeof row.slug === "string" ? row.slug : "";
+  return (
+    row.label.toLowerCase().includes(q) ||
+    slug.toLowerCase().includes(q) ||
+    String(row.id).toLowerCase().includes(q)
+  );
+}
+
 export default function Lists({
   onSelect,
   filterQuery,
@@ -66,22 +80,11 @@ export default function Lists({
   const [renameRow, setRenameRow] = useState<Row | null>(null);
   const [renameText, setRenameText] = useState("");
 
-  const filterTrim = filterQuery.trim().toLowerCase();
-  const filterActive = filterTrim.length > 0;
-
-  const visibleRows = useMemo(() => {
-    if (!filterActive) return resource.rows;
-    return resource.rows.filter((row) => {
-      const name = row.label.toLowerCase();
-      const slug = (typeof row.slug === "string" ? row.slug : "").toLowerCase();
-      const id = String(row.id).toLowerCase();
-      return (
-        name.includes(filterTrim) ||
-        slug.includes(filterTrim) ||
-        id.includes(filterTrim)
-      );
-    });
-  }, [resource.rows, filterTrim, filterActive]);
+  const { active: filterActive, visibleRows } = useFilter(
+    resource.rows,
+    filterQuery,
+    matchListRow,
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
