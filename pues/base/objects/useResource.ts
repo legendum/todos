@@ -11,27 +11,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type UseSSEResult, useSSE } from "../sse/useSSE";
+import type { WireRow } from "./wire";
 
-export type Row = {
-  id: string | number;
-  /** Omitted for resources with no label-role mapping (SPEC §5.2). */
-  label?: string;
-  position: number;
-  /** Parent's public_id for parent-scoped resources (SPEC §5.8). The SSE
-   * handler in `useResource` uses this to drop cross-parent events when
-   * the resource is mounted per-view. */
-  parent_id?: string | number;
-  updated_at?: number | string;
-  created_at?: number | string;
-  meta?: Record<string, unknown>;
-  [k: string]: unknown;
-};
+/** Client alias for the wire row shape — a thin re-export so server and
+ * client cannot drift. Generic over `TExtra` exactly like {@link WireRow}:
+ * default `Record<string, unknown>` keeps loose access, narrower types
+ * enable end-to-end typing of passthrough columns. */
+export type Row<TExtra = Record<string, unknown>> = WireRow<TExtra>;
 
-export type UseResourceResult = {
-  rows: Row[];
+export type UseResourceResult<TExtra = Record<string, unknown>> = {
+  rows: Row<TExtra>[];
   loading: boolean;
   error: Error | null;
-  mutate: (next: Row[] | ((prev: Row[]) => Row[])) => void;
+  mutate: (
+    next: Row<TExtra>[] | ((prev: Row<TExtra>[]) => Row<TExtra>[]),
+  ) => void;
   reload: () => void;
   /** When `pageSize` is set: fetches the next page (`?after_position=<last>`)
    * and appends results to `rows`. No-op if `hasMore` is false or pagination
@@ -78,10 +72,10 @@ export type UseResourceOptions = {
   filters?: Record<string, string | number>;
 };
 
-export function useResource(
+export function useResource<TExtra = Record<string, unknown>>(
   name: string,
   options: UseResourceOptions = {},
-): UseResourceResult {
+): UseResourceResult<TExtra> {
   const basePath = options.basePath ?? "/api";
   const ssePath = options.ssePath ?? "/api/events";
   const sseEnabled = options.sseEnabled ?? true;
@@ -95,7 +89,7 @@ export function useResource(
   // equal across renders.
   const filtersKey = filters ? JSON.stringify(filters) : "";
 
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<Row<TExtra>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -138,7 +132,7 @@ export function useResource(
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((data: Row[]) => {
+      .then((data: Row<TExtra>[]) => {
         if (myTick !== reloadRef.current) return;
         const fetched = Array.isArray(data) ? data : [];
         setRows(fetched);
@@ -177,7 +171,7 @@ export function useResource(
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((data: Row[]) => {
+      .then((data: Row<TExtra>[]) => {
         const next = Array.isArray(data) ? data : [];
         setRows((prev) => {
           // Defensive dedup — SSE may have inserted some of these rows
@@ -215,12 +209,14 @@ export function useResource(
       [`${name}.created`]: (data: unknown) => {
         if (!isRow(data)) return;
         if (!matchesScope(data.parent_id)) return;
-        setRows((prev) => insertSorted(prev, stripOpId(data)));
+        const row = stripOpId(data) as Row<TExtra>;
+        setRows((prev) => insertSorted(prev, row));
       },
       [`${name}.updated`]: (data: unknown) => {
         if (!isRow(data)) return;
         if (!matchesScope(data.parent_id)) return;
-        setRows((prev) => replaceById(prev, stripOpId(data)));
+        const row = stripOpId(data) as Row<TExtra>;
+        setRows((prev) => replaceById(prev, row));
       },
       [`${name}.reordered`]: (data: unknown) => {
         if (!data || typeof data !== "object") return;
@@ -239,7 +235,8 @@ export function useResource(
           insertSorted(
             prev.filter((r) => r.id !== id),
             {
-              ...(prev.find((r) => r.id === id) ?? ({ id, position } as Row)),
+              ...(prev.find((r) => r.id === id) ??
+                ({ id, position } as Row<TExtra>)),
               position,
             },
           ),
@@ -263,9 +260,11 @@ export function useResource(
     enabled: enabled && sseEnabled,
   });
 
-  const mutate: UseResourceResult["mutate"] = useCallback((next) => {
+  const mutate: UseResourceResult<TExtra>["mutate"] = useCallback((next) => {
     setRows((prev) =>
-      typeof next === "function" ? (next as (p: Row[]) => Row[])(prev) : next,
+      typeof next === "function"
+        ? (next as (p: Row<TExtra>[]) => Row<TExtra>[])(prev)
+        : next,
     );
   }, []);
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
@@ -289,22 +288,22 @@ function isRow(v: unknown): v is Row {
   return !!v && typeof v === "object" && "id" in v && "position" in v;
 }
 
-function stripOpId(row: Row): Row {
+function stripOpId<T extends Row>(row: T): T {
   if ("op_id" in row) {
-    const { op_id: _omit, ...rest } = row as Row & { op_id?: unknown };
-    return rest as Row;
+    const { op_id: _omit, ...rest } = row as T & { op_id?: unknown };
+    return rest as T;
   }
   return row;
 }
 
-function insertSorted(rows: Row[], row: Row): Row[] {
+function insertSorted<T extends Row>(rows: T[], row: T): T[] {
   const without = rows.filter((r) => r.id !== row.id);
   let i = 0;
   while (i < without.length && without[i]!.position < row.position) i++;
   return [...without.slice(0, i), row, ...without.slice(i)];
 }
 
-function replaceById(rows: Row[], row: Row): Row[] {
+function replaceById<T extends Row>(rows: T[], row: T): T[] {
   let found = false;
   const out = rows.map((r) => {
     if (r.id === row.id) {

@@ -103,6 +103,34 @@ export type BeforeUpdateHook = (
   | Response
   | Promise<Record<string, unknown> | Response>;
 
+export type BeforeDeleteContext = {
+  /** The existing row about to be deleted, in canonical wire shape — same
+   * shape `beforeUpdate` sees. Useful for hooks that need to inspect row
+   * state to decide whether to allow the delete (e.g. block delete on rows
+   * with active children, charge a credit, soft-delete instead). */
+  existing: WireRow;
+  /** The authenticated user. */
+  userId: number;
+  cols: ResolvedColumns;
+};
+
+/**
+ * Optional per-resource hook called before pues issues its `DELETE`.
+ * Asymmetric with `beforeInsert`/`beforeUpdate`: DELETE has no request body
+ * to rewrite, so the only "proceed" signal is `void`/`undefined`.
+ *
+ * Return value:
+ *   - `void` / `undefined` → pues proceeds with the DELETE and broadcasts
+ *     the `<name>.deleted` event.
+ *   - `Response` → pues returns it verbatim and skips the DELETE entirely
+ *     (no broadcast). Use for 403 quota-exhausted, 409 cascade-block, etc.
+ *
+ * `throw` is shorthand for a 400 with the error message as `error`.
+ */
+export type BeforeDeleteHook = (
+  ctx: BeforeDeleteContext,
+) => undefined | Response | Promise<undefined | Response>;
+
 export type MountResourceArgs = {
   db: Database;
   name: string;
@@ -117,6 +145,7 @@ export type MountResourceArgs = {
   newId?: () => string;
   beforeInsert?: BeforeInsertHook;
   beforeUpdate?: BeforeUpdateHook;
+  beforeDelete?: BeforeDeleteHook;
 };
 
 export type Handler = (
@@ -602,6 +631,20 @@ export function mountResource(args: MountResourceArgs): RouteMap {
           | Record<string, unknown>
           | undefined);
     if (!existing) return jsonError(404, "not_found");
+
+    if (args.beforeDelete) {
+      try {
+        const hookResult = await args.beforeDelete({
+          existing: toWire(existing, cols),
+          userId: ownerId as number,
+          cols,
+        });
+        if (hookResult instanceof Response) return hookResult;
+      } catch (err) {
+        return jsonError(400, (err as Error).message || "rejected_by_hook");
+      }
+    }
+
     const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
     const sql = `DELETE FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
     args.db.run(sql, existing.pk_value, scopeBindValue);
@@ -630,11 +673,24 @@ export function mountResource(args: MountResourceArgs): RouteMap {
   // every parent the user owns (SPEC §5.10). Bun's router prefers literal
   // segments over `:id` patterns, so the path is unambiguous.
   const countsRoute = `/api/${resourceName}/counts`;
-  return {
-    [listRoute]: { GET: getList, POST: createOne },
-    [itemRoute]: { PATCH: patchOne, DELETE: deleteOne },
-    [countsRoute]: { GET: getCounts },
-  };
+
+  // SPEC §5.11 — assemble per-route maps then drop any empty buckets so that
+  // omitted methods return real 404s (Bun's router won't match the path at
+  // all) rather than 403s from a handler that exists. Counts is GET-only.
+  const out: RouteMap = {};
+  const listMethods: Record<string, Handler> = {};
+  if (cols.methods.has("GET")) listMethods.GET = getList;
+  if (cols.methods.has("POST")) listMethods.POST = createOne;
+  if (Object.keys(listMethods).length > 0) out[listRoute] = listMethods;
+
+  const itemMethods: Record<string, Handler> = {};
+  if (cols.methods.has("PATCH")) itemMethods.PATCH = patchOne;
+  if (cols.methods.has("DELETE")) itemMethods.DELETE = deleteOne;
+  if (Object.keys(itemMethods).length > 0) out[itemRoute] = itemMethods;
+
+  if (cols.methods.has("GET")) out[countsRoute] = { GET: getCounts };
+
+  return out;
 }
 
 function buildSelectSql(cols: ResolvedColumns, getPolicy: AuthPolicy): string {
