@@ -68,6 +68,14 @@ export type UseResourceOptions = {
    * tighten in pagination mode: events for rows not in cache are dropped
    * (otherwise they'd pollute the partial-cache view). */
   pageSize?: number;
+  /** Server-side filter params (SPEC §5.9). Each key/value pair is appended
+   * to the fetch URL as a query param. Only columns whitelisted in the
+   * resource's `filter.equals` / `filter.contains` config are honored;
+   * unknown params are ignored server-side. Changes trigger a refetch. SSE
+   * events are NOT filtered client-side (superset model — the cache may
+   * contain rows that don't match the active filter; consumers re-filter at
+   * render time if it matters). */
+  filters?: Record<string, string | number>;
 };
 
 export function useResource(
@@ -81,6 +89,11 @@ export function useResource(
   const parentId = options.parentId;
   const pageSize = options.pageSize;
   const paginated = typeof pageSize === "number" && pageSize > 0;
+  const filters = options.filters;
+  // Filters trigger refetch on change; use a stable JSON serialization as
+  // the effect-dep key so {status: "todo"} and {status: "todo"} compare
+  // equal across renders.
+  const filtersKey = filters ? JSON.stringify(filters) : "";
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +102,27 @@ export function useResource(
   const [loadingMore, setLoadingMore] = useState(false);
   const reloadRef = useRef(0);
   const [reloadTick, setReloadTick] = useState(0);
+
+  const buildUrl = useCallback(
+    (extras?: Record<string, string | number>) => {
+      const params = new URLSearchParams();
+      if (paginated) params.set("limit", String(pageSize));
+      if (filters) {
+        for (const [k, v] of Object.entries(filters)) {
+          if (v !== undefined && v !== null && v !== "")
+            params.set(k, String(v));
+        }
+      }
+      if (extras) {
+        for (const [k, v] of Object.entries(extras)) {
+          params.set(k, String(v));
+        }
+      }
+      const qs = params.toString();
+      return qs ? `${basePath}/${name}?${qs}` : `${basePath}/${name}`;
+    },
+    [basePath, name, paginated, pageSize, filters],
+  );
 
   useEffect(() => {
     if (!enabled) {
@@ -99,10 +133,7 @@ export function useResource(
     setLoading(true);
     setError(null);
     setHasMore(false);
-    const url = paginated
-      ? `${basePath}/${name}?limit=${pageSize}`
-      : `${basePath}/${name}`;
-    fetch(url, { credentials: "include" })
+    fetch(buildUrl(), { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -119,7 +150,19 @@ export function useResource(
         setError(e);
         setLoading(false);
       });
-  }, [name, basePath, reloadTick, enabled, paginated, pageSize]);
+    // `buildUrl` itself is memoized over the same set of deps below; we
+    // list them here so the effect re-runs when any of them change (filter
+    // changes trigger a refetch as documented in the option).
+  }, [
+    name,
+    basePath,
+    reloadTick,
+    enabled,
+    paginated,
+    pageSize,
+    filtersKey,
+    buildUrl,
+  ]);
 
   const loadMore = useCallback(() => {
     if (!paginated || !enabled) return;
@@ -127,8 +170,9 @@ export function useResource(
     const last = rows[rows.length - 1];
     if (!last) return;
     setLoadingMore(true);
-    const url = `${basePath}/${name}?after_position=${last.position}&limit=${pageSize}`;
-    fetch(url, { credentials: "include" })
+    fetch(buildUrl({ after_position: last.position }), {
+      credentials: "include",
+    })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -147,76 +191,72 @@ export function useResource(
       .catch(() => {
         setLoadingMore(false);
       });
-  }, [paginated, enabled, loadingMore, hasMore, rows, basePath, name, pageSize]);
+  }, [paginated, enabled, loadingMore, hasMore, rows, buildUrl, pageSize]);
 
-  const handlers = useMemo(
-    () => {
-      // SPEC §5.8: when this hook is bound to a parent-scoped view via
-      // `parentId`, drop events whose `parent_id` differs. Events are
-      // delivered per-user, so a user with multiple parents (e.g. multiple
-      // fifos) receives sibling events on the same stream. Without this
-      // filter, every view's cache would accumulate cross-parent rows.
-      //
-      // Pagination intentionally does NOT tighten these rules — pues
-      // accepts a superset of events. A `.updated` for a row in an
-      // unloaded range simply inserts it into the cache (insertSorted
-      // places it at its position; if it lies beyond the loaded prefix,
-      // it appears at the tail, which is harmless for queue-shaped
-      // resources and rare for the others). Trade-off: simpler contract
-      // over a minor visual quirk in narrow edge cases.
-      const matchesScope = (eventParentId: unknown): boolean => {
-        if (parentId === undefined) return true;
-        return eventParentId === parentId;
-      };
-      return {
-        [`${name}.created`]: (data: unknown) => {
-          if (!isRow(data)) return;
-          if (!matchesScope(data.parent_id)) return;
-          setRows((prev) => insertSorted(prev, stripOpId(data)));
-        },
-        [`${name}.updated`]: (data: unknown) => {
-          if (!isRow(data)) return;
-          if (!matchesScope(data.parent_id)) return;
-          setRows((prev) => replaceById(prev, stripOpId(data)));
-        },
-        [`${name}.reordered`]: (data: unknown) => {
-          if (!data || typeof data !== "object") return;
-          const { id, position, parent_id } = data as {
-            id?: unknown;
-            position?: unknown;
-            parent_id?: unknown;
-          };
-          if (
-            typeof position !== "number" ||
-            (typeof id !== "string" && typeof id !== "number")
-          )
-            return;
-          if (!matchesScope(parent_id)) return;
-          setRows((prev) =>
-            insertSorted(
-              prev.filter((r) => r.id !== id),
-              {
-                ...(prev.find((r) => r.id === id) ??
-                  ({ id, position } as Row)),
-                position,
-              },
-            ),
-          );
-        },
-        [`${name}.deleted`]: (data: unknown) => {
-          if (!data || typeof data !== "object") return;
-          const { id, parent_id } = data as {
-            id?: unknown;
-            parent_id?: unknown;
-          };
-          if (typeof id !== "string" && typeof id !== "number") return;
-          if (!matchesScope(parent_id)) return;
-          setRows((prev) => prev.filter((r) => r.id !== id));
-        },
-      };
-    },
-    [name, parentId],
-  );
+  const handlers = useMemo(() => {
+    // SPEC §5.8: when this hook is bound to a parent-scoped view via
+    // `parentId`, drop events whose `parent_id` differs. Events are
+    // delivered per-user, so a user with multiple parents (e.g. multiple
+    // fifos) receives sibling events on the same stream. Without this
+    // filter, every view's cache would accumulate cross-parent rows.
+    //
+    // Pagination intentionally does NOT tighten these rules — pues
+    // accepts a superset of events. A `.updated` for a row in an
+    // unloaded range simply inserts it into the cache (insertSorted
+    // places it at its position; if it lies beyond the loaded prefix,
+    // it appears at the tail, which is harmless for queue-shaped
+    // resources and rare for the others). Trade-off: simpler contract
+    // over a minor visual quirk in narrow edge cases.
+    const matchesScope = (eventParentId: unknown): boolean => {
+      if (parentId === undefined) return true;
+      return eventParentId === parentId;
+    };
+    return {
+      [`${name}.created`]: (data: unknown) => {
+        if (!isRow(data)) return;
+        if (!matchesScope(data.parent_id)) return;
+        setRows((prev) => insertSorted(prev, stripOpId(data)));
+      },
+      [`${name}.updated`]: (data: unknown) => {
+        if (!isRow(data)) return;
+        if (!matchesScope(data.parent_id)) return;
+        setRows((prev) => replaceById(prev, stripOpId(data)));
+      },
+      [`${name}.reordered`]: (data: unknown) => {
+        if (!data || typeof data !== "object") return;
+        const { id, position, parent_id } = data as {
+          id?: unknown;
+          position?: unknown;
+          parent_id?: unknown;
+        };
+        if (
+          typeof position !== "number" ||
+          (typeof id !== "string" && typeof id !== "number")
+        )
+          return;
+        if (!matchesScope(parent_id)) return;
+        setRows((prev) =>
+          insertSorted(
+            prev.filter((r) => r.id !== id),
+            {
+              ...(prev.find((r) => r.id === id) ?? ({ id, position } as Row)),
+              position,
+            },
+          ),
+        );
+      },
+      [`${name}.deleted`]: (data: unknown) => {
+        if (!data || typeof data !== "object") return;
+        const { id, parent_id } = data as {
+          id?: unknown;
+          parent_id?: unknown;
+        };
+        if (typeof id !== "string" && typeof id !== "number") return;
+        if (!matchesScope(parent_id)) return;
+        setRows((prev) => prev.filter((r) => r.id !== id));
+      },
+    };
+  }, [name, parentId]);
 
   const sse = useSSE(handlers, {
     path: ssePath,

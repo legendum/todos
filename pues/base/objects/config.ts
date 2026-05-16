@@ -29,6 +29,12 @@ export type ResourceConfig = {
    * `/api/fifos/:fifo_ulid` makes pues mount the resource at
    * `<prefix>/<name>` and `<prefix>/<name>/:id`. */
   prefix?: string;
+  /** Whitelist of columns that GET /api/<name> can filter on via URL query
+   * params (SPEC §5.9). `equals` columns match exactly (`?col=value` →
+   * `WHERE col = ?`); `contains` columns match substrings (`?col=value` →
+   * `WHERE col LIKE '%' || ? || '%'`). Filters AND together; unknown params
+   * are ignored. */
+  filter?: { equals?: string[]; contains?: string[] };
   timestamp_format?: "unix" | "iso";
 };
 
@@ -74,16 +80,15 @@ export type ResolvedColumns = {
   parent: ResolvedParent | null;
   /** The original `prefix:` template (only set for parent-scoped resources). */
   prefix: string | null;
+  /** Resolved server-side filter whitelist (SPEC §5.9). Always present — empty
+   * arrays when no filters are configured. Both lists are de-duplicated and
+   * validated against PRAGMA table_info at startup. */
+  filter: { equals: string[]; contains: string[] };
   timestamp_format: "unix" | "iso";
 };
 
 const REQUIRED_ROLES = ["pk", "public_id", "owner", "position"] as const;
-const OPTIONAL_ROLES = [
-  "label",
-  "updated_at",
-  "created_at",
-  "meta",
-] as const;
+const OPTIONAL_ROLES = ["label", "updated_at", "created_at", "meta"] as const;
 const ALL_ROLES = [...REQUIRED_ROLES, ...OPTIONAL_ROLES] as const;
 
 const DEFAULTS: Record<(typeof ALL_ROLES)[number], string> = {
@@ -278,6 +283,16 @@ export function resolveColumns(
   }
   passthrough.sort();
 
+  const filterEquals = dedup(cfg.filter?.equals ?? []);
+  const filterContains = dedup(cfg.filter?.contains ?? []);
+  for (const col of [...filterEquals, ...filterContains]) {
+    if (!actual.has(col)) {
+      throw new Error(
+        `[pues] resources.${name}.filter: column "${col}" not found on table "${cfg.table}". Check the schema or remove it from the filter list.`,
+      );
+    }
+  }
+
   return {
     table: cfg.table,
     pk: mapped.pk!,
@@ -291,8 +306,21 @@ export function resolveColumns(
     passthrough,
     parent: resolvedParent,
     prefix: cfg.prefix ?? null,
+    filter: { equals: filterEquals, contains: filterContains },
     timestamp_format: cfg.timestamp_format ?? "unix",
   };
+}
+
+function dedup(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of arr) {
+    if (!seen.has(x)) {
+      seen.add(x);
+      out.push(x);
+    }
+  }
+  return out;
 }
 
 /** Extract the single `:segment` name from a parent-scoped resource's prefix

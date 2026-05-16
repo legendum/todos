@@ -317,11 +317,9 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     args.db.run(sql, ...(insertBinds as []));
 
     const row = cols.parent
-      ? (findOneStmt.get(
-          id,
-          req.params?.[cols.parent.param],
-          ownerId,
-        ) as Record<string, unknown> | undefined)
+      ? (findOneStmt.get(id, req.params?.[cols.parent.param], ownerId) as
+          | Record<string, unknown>
+          | undefined)
       : (findOneStmt.get(id, ownerId) as Record<string, unknown> | undefined);
     if (!row) return jsonError(500, "insert succeeded but row not found");
     const wire = toWire(row, cols);
@@ -340,9 +338,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (ownerId instanceof Response) return ownerId;
     const publicId = req.params?.id;
     if (!publicId) return jsonError(400, "id required");
-    const parentPublicId = cols.parent
-      ? req.params?.[cols.parent.param]
-      : null;
+    const parentPublicId = cols.parent ? req.params?.[cols.parent.param] : null;
     if (cols.parent && !parentPublicId) {
       return jsonError(400, `parent ${cols.parent.param} required`);
     }
@@ -569,17 +565,17 @@ export function mountResource(args: MountResourceArgs): RouteMap {
         `JOIN ${parentTbl} ON ${child}.${q(cols.parent.column)} = ${parentTbl}.${q(cols.parent.pk)} ` +
         `WHERE ${parentTbl}.${q(cols.parent.owner)} = ? ${buildFilterClauses(cols)} ` +
         `GROUP BY ${parentTbl}.${q(cols.parent.public_id)}, ${child}.${q(by)}`;
-      rowsOut = args.db
-        .query(sql)
-        .all(ownerId, ...filters) as Array<Record<string, unknown>>;
+      rowsOut = args.db.query(sql).all(ownerId, ...filters) as Array<
+        Record<string, unknown>
+      >;
     } else {
       const sql =
         `SELECT ${q(by)} AS value, COUNT(*) AS n FROM ${q(cols.table)} ` +
         `WHERE ${q(cols.owner!)} = ? ${buildFilterClauses(cols)} ` +
         `GROUP BY ${q(by)}`;
-      rowsOut = args.db
-        .query(sql)
-        .all(ownerId, ...filters) as Array<Record<string, unknown>>;
+      rowsOut = args.db.query(sql).all(ownerId, ...filters) as Array<
+        Record<string, unknown>
+      >;
     }
     return Response.json(rowsOut);
   };
@@ -590,9 +586,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (ownerId instanceof Response) return ownerId;
     const publicId = req.params?.id;
     if (!publicId) return jsonError(400, "id required");
-    const parentPublicId = cols.parent
-      ? req.params?.[cols.parent.param]
-      : null;
+    const parentPublicId = cols.parent ? req.params?.[cols.parent.param] : null;
     if (cols.parent && !parentPublicId) {
       return jsonError(400, `parent ${cols.parent.param} required`);
     }
@@ -734,10 +728,8 @@ function baseSelectParts(cols: ResolvedColumns): string[] {
     `${qualify(cols.position)} AS position`,
   ];
   if (cols.label) out.push(`${qualify(cols.label)} AS label`);
-  if (cols.updated_at)
-    out.push(`${qualify(cols.updated_at)} AS updated_at`);
-  if (cols.created_at)
-    out.push(`${qualify(cols.created_at)} AS created_at`);
+  if (cols.updated_at) out.push(`${qualify(cols.updated_at)} AS updated_at`);
+  if (cols.created_at) out.push(`${qualify(cols.created_at)} AS created_at`);
   if (cols.meta) out.push(`${qualify(cols.meta)} AS meta`);
   // Parent-scoped wire rows project the parent's public_id (SPEC §5.8) so
   // per-mount useResource SSE handlers can filter cross-parent events.
