@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
-  /* Matches topbar vertical padding (10+10) + filter min-height (40) + border (1) = 61px, rounded up for breathing room. */
-  --topbar-height: 64px;
+  /* Matches topbar vertical padding (10+10) + filter min-height (44, from .pues-filter-bar) + border (1) = 65px. */
+  --topbar-height: 65px;
   --bg-page: #0f172a;
   --bg-surface: #1e293b;
   --bg-raised: #334155;
@@ -132,7 +132,6 @@ body {
 .topbar-search-filter {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
   padding: 0 10px;
 }
 .topbar-right {
