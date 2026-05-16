@@ -62,7 +62,10 @@ export type ResolvedColumns = {
   public_id: string;
   /** null for parent-scoped resources (ownership is inherited via `parent`). */
   owner: string | null;
-  label: string;
+  /** null for resources whose rows have no human-friendly name (queue items,
+   * log entries). Wire row omits the `label` key in that case; pues' rename
+   * primitives (`useRename`, `<RenameTitle>`) are not applicable. */
+  label: string | null;
   position: string;
   updated_at: string | null;
   created_at: string | null;
@@ -74,14 +77,13 @@ export type ResolvedColumns = {
   timestamp_format: "unix" | "iso";
 };
 
-const REQUIRED_ROLES = [
-  "pk",
-  "public_id",
-  "owner",
+const REQUIRED_ROLES = ["pk", "public_id", "owner", "position"] as const;
+const OPTIONAL_ROLES = [
   "label",
-  "position",
+  "updated_at",
+  "created_at",
+  "meta",
 ] as const;
-const OPTIONAL_ROLES = ["updated_at", "created_at", "meta"] as const;
 const ALL_ROLES = [...REQUIRED_ROLES, ...OPTIONAL_ROLES] as const;
 
 const DEFAULTS: Record<(typeof ALL_ROLES)[number], string> = {
@@ -278,7 +280,7 @@ export function resolveColumns(
     pk: mapped.pk!,
     public_id: mapped.public_id!,
     owner: mapped.owner,
-    label: mapped.label!,
+    label: mapped.label,
     position: mapped.position!,
     updated_at: mapped.updated_at,
     created_at: mapped.created_at,

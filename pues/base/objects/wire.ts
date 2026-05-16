@@ -9,7 +9,9 @@ import type { ResolvedColumns } from "./config";
 
 export type WireRow = {
   id: string | number;
-  label: string;
+  /** Omitted for resources with no `label` role mapping (SPEC §5.2) — queue
+   * items and other rows without a human-friendly name. */
+  label?: string;
   position: number;
   updated_at?: number | string;
   created_at?: number | string;
@@ -23,9 +25,9 @@ export function toWire(
 ): WireRow {
   const out: WireRow = {
     id: row.public_id_value as string | number,
-    label: row.label as string,
     position: row.position as number,
   };
+  if (cols.label) out.label = row.label as string;
   if (cols.updated_at) out.updated_at = row.updated_at as number | string;
   if (cols.created_at) out.created_at = row.created_at as number | string;
   if (cols.meta) out.meta = safeParseMeta(row.meta);

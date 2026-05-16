@@ -214,7 +214,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     const parentPk = parentPkOrResponse as number | null;
     const body = await readJsonBody(req);
     if (body instanceof Response) return body;
-    if (typeof body.label !== "string" || body.label.trim() === "") {
+    if (
+      cols.label &&
+      (typeof body.label !== "string" || body.label.trim() === "")
+    ) {
       return jsonError(400, "label required");
     }
 
@@ -248,23 +251,17 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     const position = appendPosition(args.db, cols, scope);
 
     const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
-    const insertCols: string[] = [
-      scopeColName,
-      cols.public_id,
-      cols.label,
-      cols.position,
-    ];
-    const labelToInsert =
-      typeof effectiveBody.label === "string" &&
-      effectiveBody.label.trim() !== ""
-        ? String(effectiveBody.label).trim()
-        : String(body.label).trim();
-    const insertBinds: unknown[] = [
-      scopeBindValue,
-      id,
-      labelToInsert,
-      position,
-    ];
+    const insertCols: string[] = [scopeColName, cols.public_id, cols.position];
+    const insertBinds: unknown[] = [scopeBindValue, id, position];
+    if (cols.label) {
+      const labelToInsert =
+        typeof effectiveBody.label === "string" &&
+        effectiveBody.label.trim() !== ""
+          ? String(effectiveBody.label).trim()
+          : String(body.label).trim();
+      insertCols.push(cols.label);
+      insertBinds.push(labelToInsert);
+    }
     const now = Math.floor(Date.now() / 1000);
     if (cols.updated_at) {
       insertCols.push(cols.updated_at);
@@ -377,6 +374,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     let didReorder = false;
 
     if (
+      cols.label &&
       typeof effectiveBody.label === "string" &&
       effectiveBody.label.trim() !== ""
     ) {
@@ -561,19 +559,23 @@ export function mountResource(args: MountResourceArgs): RouteMap {
 
 function buildSelectSql(cols: ResolvedColumns, getPolicy: AuthPolicy): string {
   const parts = baseSelectParts(cols);
-  const orderBy = `ORDER BY ${q(cols.position)} ASC, ${q(cols.pk)} ASC`;
   if (cols.parent) {
     // Parent-scoped: JOIN to the parent table and authorize via the
     // parent's public_id (from URL) + owner (authenticated userId).
     // SPEC §5.8 — public-read is rejected at startup for parent-scoped.
+    // ORDER BY refs are qualified because position/pk can exist on both
+    // child and parent (SQLite throws "ambiguous column" otherwise).
+    const child = q(cols.table);
     return (
-      `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ` +
-      `JOIN ${q(cols.parent.table)} ON ${q(cols.table)}.${q(cols.parent.column)} = ${q(cols.parent.table)}.${q(cols.parent.pk)} ` +
+      `SELECT ${parts.join(", ")} FROM ${child} ` +
+      `JOIN ${q(cols.parent.table)} ON ${child}.${q(cols.parent.column)} = ${q(cols.parent.table)}.${q(cols.parent.pk)} ` +
       `WHERE ${q(cols.parent.table)}.${q(cols.parent.public_id)} = ? AND ${q(cols.parent.table)}.${q(cols.parent.owner)} = ? ` +
-      `${orderBy} LIMIT ? OFFSET ?`
+      `ORDER BY ${child}.${q(cols.position)} ASC, ${child}.${q(cols.pk)} ASC ` +
+      `LIMIT ? OFFSET ?`
     );
   }
   const where = getPolicy === "user" ? `WHERE ${q(cols.owner!)} = ?` : "";
+  const orderBy = `ORDER BY ${q(cols.position)} ASC, ${q(cols.pk)} ASC`;
   return `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ${where} ${orderBy} LIMIT ? OFFSET ?`;
 }
 
@@ -600,9 +602,9 @@ function baseSelectParts(cols: ResolvedColumns): string[] {
   const out: string[] = [
     `${qualify(cols.pk)} AS pk_value`,
     `${qualify(cols.public_id)} AS public_id_value`,
-    `${qualify(cols.label)} AS label`,
     `${qualify(cols.position)} AS position`,
   ];
+  if (cols.label) out.push(`${qualify(cols.label)} AS label`);
   if (cols.updated_at)
     out.push(`${qualify(cols.updated_at)} AS updated_at`);
   if (cols.created_at)
