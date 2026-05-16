@@ -22,7 +22,13 @@ export type ColumnRoles = {
 export type ResourceConfig = {
   table: string;
   columns?: Partial<ColumnRoles>;
+  /** Parent-scoped resources only — see SPEC §5.8. */
   parent?: { column: string; table: string };
+  /** Required when `parent` is set. Route template with exactly one `:segment`
+   * which captures the parent's `public_id` from the URL — e.g.
+   * `/api/fifos/:fifo_ulid` makes pues mount the resource at
+   * `<prefix>/<name>` and `<prefix>/<name>/:id`. */
+  prefix?: string;
   timestamp_format?: "unix" | "iso";
 };
 
@@ -32,18 +38,39 @@ export type PuesConfig = {
   resources?: Record<string, ResourceConfig>;
 };
 
+/** Resolved parent reference for a parent-scoped resource (SPEC §5.8).
+ * Carries both the child-side FK and the parent's resolved roles, so JOIN
+ * SQL and authorization queries do not need to re-resolve the parent. */
+export type ResolvedParent = {
+  /** FK column on the child table (e.g. `items.fifo_id`). */
+  column: string;
+  /** Parent's table name. */
+  table: string;
+  /** URL param name parsed from the resource's `prefix:` template. */
+  param: string;
+  /** Parent's resolved `pk` column (target of the FK join). */
+  pk: string;
+  /** Parent's resolved `public_id` column — matched against the URL param. */
+  public_id: string;
+  /** Parent's resolved `owner` column — authorizes the request. */
+  owner: string;
+};
+
 export type ResolvedColumns = {
   table: string;
   pk: string;
   public_id: string;
-  owner: string;
+  /** null for parent-scoped resources (ownership is inherited via `parent`). */
+  owner: string | null;
   label: string;
   position: string;
   updated_at: string | null;
   created_at: string | null;
   meta: string | null;
   passthrough: string[];
-  parent: { column: string; table: string } | null;
+  parent: ResolvedParent | null;
+  /** The original `prefix:` template (only set for parent-scoped resources). */
+  prefix: string | null;
   timestamp_format: "unix" | "iso";
 };
 
@@ -91,6 +118,7 @@ export function resolveColumns(
   db: Database,
   name: string,
   cfg: ResourceConfig,
+  parentCols?: ResolvedColumns,
 ): ResolvedColumns {
   if (!cfg || typeof cfg.table !== "string" || cfg.table.length === 0) {
     throw new Error(`[pues] resources.${name}: missing or empty 'table'.`);
@@ -105,6 +133,41 @@ export function resolveColumns(
         );
       }
     }
+  }
+
+  const isParentScoped = !!cfg.parent;
+
+  // `prefix:` and parent-scoping are paired (SPEC §5.8). Reject mismatches
+  // before any column resolution so the error surfaces at the config layer.
+  if (isParentScoped && (!cfg.prefix || cfg.prefix.length === 0)) {
+    throw new Error(
+      `[pues] resources.${name}: parent-scoped resource requires 'prefix:' (SPEC §5.8).`,
+    );
+  }
+  if (!isParentScoped && cfg.prefix) {
+    throw new Error(
+      `[pues] resources.${name}: 'prefix:' is only valid on parent-scoped resources.`,
+    );
+  }
+  if (isParentScoped && cfg.columns?.owner) {
+    throw new Error(
+      `[pues] resources.${name}.columns.owner: parent-scoped resources inherit ownership via 'parent' (SPEC §5.8) — do not map 'owner' explicitly.`,
+    );
+  }
+  if (isParentScoped && !parentCols) {
+    throw new Error(
+      `[pues] resources.${name}: parent-scoped resource needs the parent's ResolvedColumns passed as the 4th arg. Resolve the parent resource first.`,
+    );
+  }
+  if (isParentScoped && parentCols && cfg.parent!.table !== parentCols.table) {
+    throw new Error(
+      `[pues] resources.${name}.parent.table = "${cfg.parent!.table}" but parentCols.table = "${parentCols.table}". The parent reference must match the resolved parent's table.`,
+    );
+  }
+  if (isParentScoped && parentCols && parentCols.owner == null) {
+    throw new Error(
+      `[pues] resources.${name}: parent resource "${parentCols.table}" has no 'owner' role — ownership cannot be inherited. (Multi-level parent chains are not supported in v0.6.)`,
+    );
   }
 
   const info = db
@@ -124,6 +187,13 @@ export function resolveColumns(
   const mapped: Record<string, string | null> = {};
 
   for (const role of ALL_ROLES) {
+    // Parent-scoped resources inherit ownership via the parent (SPEC §5.8).
+    // Force-null `owner` regardless of whether the child table happens to
+    // carry a `user_id` column — the contract is explicit.
+    if (role === "owner" && isParentScoped) {
+      mapped[role] = null;
+      continue;
+    }
     const isOptional = (OPTIONAL_ROLES as readonly string[]).includes(role);
     const v = explicit[role];
 
@@ -164,17 +234,27 @@ export function resolveColumns(
     }
   }
 
-  if (cfg.parent) {
-    if (!cfg.parent.column || !cfg.parent.table) {
+  let resolvedParent: ResolvedParent | null = null;
+  if (isParentScoped) {
+    if (!cfg.parent!.column || !cfg.parent!.table) {
       throw new Error(
         `[pues] resources.${name}.parent must have both 'column' and 'table'.`,
       );
     }
-    if (!actual.has(cfg.parent.column)) {
+    if (!actual.has(cfg.parent!.column)) {
       throw new Error(
-        `[pues] resources.${name}.parent.column = "${cfg.parent.column}" — no such column on table "${cfg.table}".`,
+        `[pues] resources.${name}.parent.column = "${cfg.parent!.column}" — no such column on table "${cfg.table}".`,
       );
     }
+    const param = parsePrefixParam(name, cfg.prefix!);
+    resolvedParent = {
+      column: cfg.parent!.column,
+      table: cfg.parent!.table,
+      param,
+      pk: parentCols!.pk,
+      public_id: parentCols!.public_id,
+      owner: parentCols!.owner!,
+    };
   }
 
   const mappedColumns = new Set(
@@ -197,16 +277,39 @@ export function resolveColumns(
     table: cfg.table,
     pk: mapped.pk!,
     public_id: mapped.public_id!,
-    owner: mapped.owner!,
+    owner: mapped.owner,
     label: mapped.label!,
     position: mapped.position!,
     updated_at: mapped.updated_at,
     created_at: mapped.created_at,
     meta: mapped.meta,
     passthrough,
-    parent: cfg.parent ?? null,
+    parent: resolvedParent,
+    prefix: cfg.prefix ?? null,
     timestamp_format: cfg.timestamp_format ?? "unix",
   };
+}
+
+/** Extract the single `:segment` name from a parent-scoped resource's prefix
+ * template. Throws on zero or multiple `:segments` (SPEC §5.8). */
+function parsePrefixParam(name: string, prefix: string): string {
+  if (!prefix.startsWith("/")) {
+    throw new Error(
+      `[pues] resources.${name}.prefix = ${JSON.stringify(prefix)} — must start with "/".`,
+    );
+  }
+  const matches = [...prefix.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)];
+  if (matches.length === 0) {
+    throw new Error(
+      `[pues] resources.${name}.prefix = ${JSON.stringify(prefix)} — must contain exactly one ":segment" capturing the parent's public_id (SPEC §5.8).`,
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `[pues] resources.${name}.prefix = ${JSON.stringify(prefix)} — has ${matches.length} ":segments"; exactly one is allowed (SPEC §5.8 — nesting deeper than one level is not supported).`,
+    );
+  }
+  return matches[0][1];
 }
 
 function quoteIdent(s: string): string {

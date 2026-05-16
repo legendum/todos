@@ -16,6 +16,18 @@ export const POSITION_STEP = 1000;
 
 const q = quoteIdent;
 
+/** Position-math scope.
+ *
+ *   - Top-level resource: `{ ownerId }` — WHERE is `owner = ?`.
+ *   - Parent-scoped resource (SPEC §5.8): `{ parentId }` — WHERE is
+ *     `parent.column = ?` only. Owner is not in the WHERE because the
+ *     child table doesn't carry one; the parent's ownership was already
+ *     authorized at the request boundary, so checking it on every
+ *     reorder write would be wasted JOINs.
+ *
+ * `ownerId` is harmless on parent-scoped writes (mountResource sets it for
+ * symmetry / SSE broadcast), but `whereScope` ignores it in that case.
+ */
 export type Scope = { ownerId: number; parentId?: number | null };
 
 export type RenumberEntry = { pk: unknown; position: number };
@@ -29,13 +41,23 @@ function whereScope(
   cols: ResolvedColumns,
   scope: Scope,
 ): { sql: string; binds: unknown[] } {
-  const parts: string[] = [`${q(cols.owner)} = ?`];
-  const binds: unknown[] = [scope.ownerId];
   if (cols.parent) {
-    parts.push(`${q(cols.parent.column)} = ?`);
-    binds.push(scope.parentId ?? null);
+    if (scope.parentId == null) {
+      throw new Error(
+        `[pues] position scope on parent-scoped resource "${cols.table}" requires scope.parentId.`,
+      );
+    }
+    return {
+      sql: `${q(cols.parent.column)} = ?`,
+      binds: [scope.parentId],
+    };
   }
-  return { sql: parts.join(" AND "), binds };
+  if (cols.owner == null) {
+    throw new Error(
+      `[pues] position scope on resource "${cols.table}" has no owner role and no parent — config resolution is inconsistent.`,
+    );
+  }
+  return { sql: `${q(cols.owner)} = ?`, binds: [scope.ownerId] };
 }
 
 export function appendPosition(

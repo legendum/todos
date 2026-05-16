@@ -107,6 +107,10 @@ export type MountResourceArgs = {
   db: Database;
   name: string;
   config: ResourceConfig;
+  /** Required when `config.parent` is set (SPEC §5.8). Pre-resolved parent
+   * role mapping — the consumer resolves the top-level parent first and
+   * passes its `ResolvedColumns` here. */
+  parentCols?: ResolvedColumns;
   resolveUser?: ResolveUserFn;
   auth?: AuthConfig;
   broadcast?: Broadcast;
@@ -127,27 +131,77 @@ const MAX_LIMIT = 1000;
 const q = quoteIdent;
 
 export function mountResource(args: MountResourceArgs): RouteMap {
-  const cols = resolveColumns(args.db, args.name, args.config);
+  const cols = resolveColumns(args.db, args.name, args.config, args.parentCols);
   const auth = { ...DEFAULT_AUTH, ...(args.auth ?? {}) };
   const mintId = args.newId ?? defaultNewId;
   const broadcast = args.broadcast;
   const resourceName = args.name;
+
+  // Parent-scoped resources require authenticated user on both GET and write
+  // (SPEC §5.8). Public-read on a parent-scoped resource is not supported in
+  // v0.6 — relax if a real consumer needs it.
+  if (cols.parent && (auth.get === "public" || auth.write === "public")) {
+    throw new Error(
+      `[pues] resources.${resourceName}: parent-scoped resources require auth.get and auth.write = "user" (SPEC §5.8).`,
+    );
+  }
 
   const selectSql = buildSelectSql(cols, auth.get);
   const selectStmt = args.db.query(selectSql);
   const findOneSql = buildFindOneSql(cols);
   const findOneStmt = args.db.query(findOneSql);
 
+  // For parent-scoped resources: resolve the parent's numeric pk from the
+  // URL param + authenticated userId. Used on POST (before INSERT) and as
+  // the value bound to `<child>.<parent.column>` on writes. SELECT/findOne
+  // do the authorization through the JOIN, so they do not call this.
+  const parentPkStmt = cols.parent
+    ? args.db.query(
+        `SELECT ${q(cols.parent.pk)} AS pk FROM ${q(cols.parent.table)} WHERE ${q(cols.parent.public_id)} = ? AND ${q(cols.parent.owner)} = ?`,
+      )
+    : null;
+
+  function resolveParentPk(
+    req: Request & { params?: Record<string, string> },
+    ownerId: number,
+  ): unknown | Response {
+    if (!cols.parent || !parentPkStmt) return null;
+    const parentPublicId = req.params?.[cols.parent.param];
+    if (!parentPublicId) {
+      return jsonError(400, `parent ${cols.parent.param} required`);
+    }
+    const row = parentPkStmt.get(parentPublicId, ownerId) as
+      | { pk: unknown }
+      | undefined;
+    if (!row) return jsonError(404, "not_found");
+    return row.pk;
+  }
+
+  // The column on the child table that scopes writes — `cols.parent.column`
+  // for parent-scoped resources, `cols.owner` for top-level. Bound to either
+  // `parentPk` or `userId` respectively.
+  const scopeColName: string = cols.parent ? cols.parent.column : cols.owner!;
+
   const getList: Handler = async (req) => {
     const ownerId = await resolveOwner(req, args.resolveUser, auth.get);
     if (ownerId instanceof Response) return ownerId;
     const { limit, offset } = parsePagination(req.url);
-    const rows =
-      auth.get === "user"
-        ? (selectStmt.all(ownerId, limit, offset) as Array<
-            Record<string, unknown>
-          >)
-        : (selectStmt.all(limit, offset) as Array<Record<string, unknown>>);
+    let rows: Array<Record<string, unknown>>;
+    if (cols.parent) {
+      const parentPublicId = req.params?.[cols.parent.param];
+      if (!parentPublicId) {
+        return jsonError(400, `parent ${cols.parent.param} required`);
+      }
+      rows = selectStmt.all(parentPublicId, ownerId, limit, offset) as Array<
+        Record<string, unknown>
+      >;
+    } else if (auth.get === "user") {
+      rows = selectStmt.all(ownerId, limit, offset) as Array<
+        Record<string, unknown>
+      >;
+    } else {
+      rows = selectStmt.all(limit, offset) as Array<Record<string, unknown>>;
+    }
     return Response.json(rows.map((r) => toWire(r, cols)));
   };
 
@@ -155,6 +209,9 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (auth.write !== "user") return jsonError(403, "forbidden");
     const ownerId = await resolveOwner(req, args.resolveUser, "user");
     if (ownerId instanceof Response) return ownerId;
+    const parentPkOrResponse = resolveParentPk(req, ownerId as number);
+    if (parentPkOrResponse instanceof Response) return parentPkOrResponse;
+    const parentPk = parentPkOrResponse as number | null;
     const body = await readJsonBody(req);
     if (body instanceof Response) return body;
     if (typeof body.label !== "string" || body.label.trim() === "") {
@@ -184,11 +241,15 @@ export function mountResource(args: MountResourceArgs): RouteMap {
 
     const opId = getOpId(req);
     const id = mintId();
-    const scope: Scope = { ownerId: ownerId as number };
+    const scope: Scope = {
+      ownerId: ownerId as number,
+      parentId: parentPk,
+    };
     const position = appendPosition(args.db, cols, scope);
 
+    const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
     const insertCols: string[] = [
-      cols.owner,
+      scopeColName,
       cols.public_id,
       cols.label,
       cols.position,
@@ -198,7 +259,12 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       effectiveBody.label.trim() !== ""
         ? String(effectiveBody.label).trim()
         : String(body.label).trim();
-    const insertBinds: unknown[] = [ownerId, id, labelToInsert, position];
+    const insertBinds: unknown[] = [
+      scopeBindValue,
+      id,
+      labelToInsert,
+      position,
+    ];
     const now = Math.floor(Date.now() / 1000);
     if (cols.updated_at) {
       insertCols.push(cols.updated_at);
@@ -218,6 +284,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     }
     for (const col of cols.passthrough) {
       if (col === cols.pk) continue;
+      // The parent FK column is set by pues from the resolved parent pk —
+      // it must never come from the request body (the URL is the only
+      // source of truth for which parent the row belongs to).
+      if (cols.parent && col === cols.parent.column) continue;
       if (col in effectiveBody) {
         insertCols.push(col);
         insertBinds.push(effectiveBody[col]);
@@ -227,9 +297,13 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     const sql = `INSERT INTO ${q(cols.table)} (${insertCols.map(q).join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`;
     args.db.run(sql, ...(insertBinds as []));
 
-    const row = findOneStmt.get(id, ownerId) as
-      | Record<string, unknown>
-      | undefined;
+    const row = cols.parent
+      ? (findOneStmt.get(
+          id,
+          req.params?.[cols.parent.param],
+          ownerId,
+        ) as Record<string, unknown> | undefined)
+      : (findOneStmt.get(id, ownerId) as Record<string, unknown> | undefined);
     if (!row) return jsonError(500, "insert succeeded but row not found");
     const wire = toWire(row, cols);
     broadcast?.(ownerId as number, `${resourceName}.created`, wire, {
@@ -247,16 +321,32 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (ownerId instanceof Response) return ownerId;
     const publicId = req.params?.id;
     if (!publicId) return jsonError(400, "id required");
+    const parentPublicId = cols.parent
+      ? req.params?.[cols.parent.param]
+      : null;
+    if (cols.parent && !parentPublicId) {
+      return jsonError(400, `parent ${cols.parent.param} required`);
+    }
+    const parentPkOrResponse = resolveParentPk(req, ownerId as number);
+    if (parentPkOrResponse instanceof Response) return parentPkOrResponse;
+    const parentPk = parentPkOrResponse as number | null;
     const body = await readJsonBody(req);
     if (body instanceof Response) return body;
 
-    const existing = findOneStmt.get(publicId, ownerId) as
-      | Record<string, unknown>
-      | undefined;
+    const existing = cols.parent
+      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+          | Record<string, unknown>
+          | undefined)
+      : (findOneStmt.get(publicId, ownerId) as
+          | Record<string, unknown>
+          | undefined);
     if (!existing) return jsonError(404, "not_found");
     const existingPk = existing.pk_value;
     const opId = getOpId(req);
-    const scope: Scope = { ownerId: ownerId as number };
+    const scope: Scope = {
+      ownerId: ownerId as number,
+      parentId: parentPk,
+    };
 
     let effectiveBody: Record<string, unknown> = body;
     if (args.beforeUpdate) {
@@ -299,6 +389,9 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     }
     for (const col of cols.passthrough) {
       if (col === cols.pk) continue;
+      // Parent FK column is owned by pues; a client cannot reparent a row
+      // via PATCH (move-between-parents is not in the v0.6 surface).
+      if (cols.parent && col === cols.parent.column) continue;
       if (col in effectiveBody) {
         setCols.push(col);
         setBinds.push(effectiveBody[col]);
@@ -352,23 +445,28 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       return jsonError(400, "no_fields_to_update");
     }
 
+    const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
     const tx = args.db.transaction(() => {
       const updateSql = `UPDATE ${q(cols.table)} SET ${setCols
         .map((c) => `${q(c)} = ?`)
-        .join(", ")} WHERE ${q(cols.pk)} = ? AND ${q(cols.owner)} = ?`;
-      args.db.run(updateSql, ...(setBinds as []), existingPk, ownerId);
+        .join(", ")} WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
+      args.db.run(updateSql, ...(setBinds as []), existingPk, scopeBindValue);
       if (reorderRenumber.length > 0) {
-        const upPosSql = `UPDATE ${q(cols.table)} SET ${q(cols.position)} = ? WHERE ${q(cols.pk)} = ? AND ${q(cols.owner)} = ?`;
+        const upPosSql = `UPDATE ${q(cols.table)} SET ${q(cols.position)} = ? WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
         for (const e of reorderRenumber) {
-          args.db.run(upPosSql, e.position, e.pk, ownerId);
+          args.db.run(upPosSql, e.position, e.pk, scopeBindValue);
         }
       }
     });
     tx();
 
-    const row = findOneStmt.get(publicId, ownerId) as
-      | Record<string, unknown>
-      | undefined;
+    const row = cols.parent
+      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+          | Record<string, unknown>
+          | undefined)
+      : (findOneStmt.get(publicId, ownerId) as
+          | Record<string, unknown>
+          | undefined);
     if (!row) return jsonError(500, "update succeeded but row not found");
     const wire = toWire(row, cols);
 
@@ -416,13 +514,27 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (ownerId instanceof Response) return ownerId;
     const publicId = req.params?.id;
     if (!publicId) return jsonError(400, "id required");
+    const parentPublicId = cols.parent
+      ? req.params?.[cols.parent.param]
+      : null;
+    if (cols.parent && !parentPublicId) {
+      return jsonError(400, `parent ${cols.parent.param} required`);
+    }
+    const parentPkOrResponse = resolveParentPk(req, ownerId as number);
+    if (parentPkOrResponse instanceof Response) return parentPkOrResponse;
+    const parentPk = parentPkOrResponse as number | null;
     const opId = getOpId(req);
-    const existing = findOneStmt.get(publicId, ownerId) as
-      | Record<string, unknown>
-      | undefined;
+    const existing = cols.parent
+      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+          | Record<string, unknown>
+          | undefined)
+      : (findOneStmt.get(publicId, ownerId) as
+          | Record<string, unknown>
+          | undefined);
     if (!existing) return jsonError(404, "not_found");
-    const sql = `DELETE FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ? AND ${q(cols.owner)} = ?`;
-    args.db.run(sql, existing.pk_value, ownerId);
+    const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
+    const sql = `DELETE FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
+    args.db.run(sql, existing.pk_value, scopeBindValue);
     broadcast?.(
       ownerId as number,
       `${resourceName}.deleted`,
@@ -434,36 +546,70 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     return new Response(null, { status: 204 });
   };
 
+  // Route shape: top-level resources use `/api/<name>` (the historical
+  // default); parent-scoped resources mount under the consumer-specified
+  // `prefix:` template, e.g. `/api/fifos/:fifo_ulid/<name>` (SPEC §5.8).
+  const listRoute = cols.prefix
+    ? `${cols.prefix}/${resourceName}`
+    : `/api/${resourceName}`;
+  const itemRoute = `${listRoute}/:id`;
   return {
-    [`/api/${resourceName}`]: { GET: getList, POST: createOne },
-    [`/api/${resourceName}/:id`]: { PATCH: patchOne, DELETE: deleteOne },
+    [listRoute]: { GET: getList, POST: createOne },
+    [itemRoute]: { PATCH: patchOne, DELETE: deleteOne },
   };
 }
 
 function buildSelectSql(cols: ResolvedColumns, getPolicy: AuthPolicy): string {
   const parts = baseSelectParts(cols);
-  const where = getPolicy === "user" ? `WHERE ${q(cols.owner)} = ?` : "";
   const orderBy = `ORDER BY ${q(cols.position)} ASC, ${q(cols.pk)} ASC`;
+  if (cols.parent) {
+    // Parent-scoped: JOIN to the parent table and authorize via the
+    // parent's public_id (from URL) + owner (authenticated userId).
+    // SPEC §5.8 — public-read is rejected at startup for parent-scoped.
+    return (
+      `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ` +
+      `JOIN ${q(cols.parent.table)} ON ${q(cols.table)}.${q(cols.parent.column)} = ${q(cols.parent.table)}.${q(cols.parent.pk)} ` +
+      `WHERE ${q(cols.parent.table)}.${q(cols.parent.public_id)} = ? AND ${q(cols.parent.table)}.${q(cols.parent.owner)} = ? ` +
+      `${orderBy} LIMIT ? OFFSET ?`
+    );
+  }
+  const where = getPolicy === "user" ? `WHERE ${q(cols.owner!)} = ?` : "";
   return `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ${where} ${orderBy} LIMIT ? OFFSET ?`;
 }
 
 function buildFindOneSql(cols: ResolvedColumns): string {
   const parts = baseSelectParts(cols);
-  return `SELECT ${parts.join(", ")} FROM ${q(cols.table)} WHERE ${q(cols.public_id)} = ? AND ${q(cols.owner)} = ? LIMIT 1`;
+  if (cols.parent) {
+    return (
+      `SELECT ${parts.join(", ")} FROM ${q(cols.table)} ` +
+      `JOIN ${q(cols.parent.table)} ON ${q(cols.table)}.${q(cols.parent.column)} = ${q(cols.parent.table)}.${q(cols.parent.pk)} ` +
+      `WHERE ${q(cols.table)}.${q(cols.public_id)} = ? AND ${q(cols.parent.table)}.${q(cols.parent.public_id)} = ? AND ${q(cols.parent.table)}.${q(cols.parent.owner)} = ? ` +
+      `LIMIT 1`
+    );
+  }
+  return `SELECT ${parts.join(", ")} FROM ${q(cols.table)} WHERE ${q(cols.public_id)} = ? AND ${q(cols.owner!)} = ? LIMIT 1`;
 }
 
 function baseSelectParts(cols: ResolvedColumns): string[] {
+  // For parent-scoped resources the JOIN table is in scope, so we qualify
+  // child columns with the table name to avoid ambiguity (e.g. `position`
+  // might exist on both the child and the parent).
+  const child = q(cols.table);
+  const qualify = (col: string) =>
+    cols.parent ? `${child}.${q(col)}` : q(col);
   const out: string[] = [
-    `${q(cols.pk)} AS pk_value`,
-    `${q(cols.public_id)} AS public_id_value`,
-    `${q(cols.label)} AS label`,
-    `${q(cols.position)} AS position`,
+    `${qualify(cols.pk)} AS pk_value`,
+    `${qualify(cols.public_id)} AS public_id_value`,
+    `${qualify(cols.label)} AS label`,
+    `${qualify(cols.position)} AS position`,
   ];
-  if (cols.updated_at) out.push(`${q(cols.updated_at)} AS updated_at`);
-  if (cols.created_at) out.push(`${q(cols.created_at)} AS created_at`);
-  if (cols.meta) out.push(`${q(cols.meta)} AS meta`);
+  if (cols.updated_at)
+    out.push(`${qualify(cols.updated_at)} AS updated_at`);
+  if (cols.created_at)
+    out.push(`${qualify(cols.created_at)} AS created_at`);
+  if (cols.meta) out.push(`${qualify(cols.meta)} AS meta`);
   for (const col of cols.passthrough) {
-    out.push(q(col));
+    out.push(qualify(col));
   }
   return out;
 }
