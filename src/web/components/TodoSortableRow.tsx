@@ -1,10 +1,12 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useSwipeToReveal } from "pues/base/objects";
 import CheckIcon from "./CheckIcon";
 import DragHandle from "./DragHandle";
 import type { Line } from "./lines";
 import { TodoMarkdownText } from "./MarkdownBlock";
-import { useSwipeToReveal } from "./useSwipeToReveal";
+
+const SWIPE_IGNORE = [".todo-checkbox", "a.text-inline-link"];
 
 export default function TodoSortableRow({
   line,
@@ -27,6 +29,7 @@ export default function TodoSortableRow({
   } = useSortable({ id: line.id });
   const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
     actionCount: 2,
+    ignoreSelectors: SWIPE_IGNORE,
   });
 
   const style: React.CSSProperties = {

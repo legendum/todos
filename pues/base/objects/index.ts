@@ -8,8 +8,6 @@ export {
   resolveColumns,
 } from "./config";
 export { FilterBar, type FilterBarProps } from "./FilterBar";
-export { ObjectDetail, type ObjectDetailProps } from "./ObjectDetail";
-export { RenameTitle, type RenameTitleProps } from "./RenameTitle";
 export {
   type AuthConfig,
   type AuthPolicy,
@@ -25,6 +23,7 @@ export {
   type RouteMap,
 } from "./mountResource";
 export { newId } from "./newId";
+export { ObjectDetail, type ObjectDetailProps } from "./ObjectDetail";
 export {
   ObjectList,
   type ObjectListProps,
@@ -40,6 +39,13 @@ export {
   type ReorderResult,
   type Scope,
 } from "./position";
+export { RenameTitle, type RenameTitleProps } from "./RenameTitle";
+export {
+  type DeleteOutcome,
+  type UseDeleteOptions,
+  type UseDeleteResult,
+  useDelete,
+} from "./useDelete";
 export {
   type UseDndPositionsArgs,
   type UseDndPositionsResult,
@@ -63,4 +69,12 @@ export {
   type UseResourceResult,
   useResource,
 } from "./useResource";
+export {
+  clampSwipeOffset,
+  detectGestureMode,
+  type SwipeToRevealResult,
+  shouldSnapOpen,
+  type UseSwipeToRevealOptions,
+  useSwipeToReveal,
+} from "./useSwipeToReveal";
 export { toWire, type WireRow } from "./wire";

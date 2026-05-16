@@ -1,7 +1,9 @@
+import { useSwipeToReveal } from "pues/base/objects";
 import CheckIcon from "./CheckIcon";
 import type { Line } from "./lines";
 import { TodoMarkdownText } from "./MarkdownBlock";
-import { useSwipeToReveal } from "./useSwipeToReveal";
+
+const SWIPE_IGNORE = [".todo-checkbox", "a.text-inline-link"];
 
 /**
  * Non-draggable todo row used while a filter is active — reordering a filtered
@@ -20,6 +22,7 @@ export default function StaticTodoRow({
 }) {
   const { sliderStyle, slideHandlers, reset } = useSwipeToReveal({
     actionCount: 2,
+    ignoreSelectors: SWIPE_IGNORE,
   });
 
   const indentPad = (line.indent || "").length * 20;

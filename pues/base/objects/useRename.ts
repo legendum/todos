@@ -25,9 +25,7 @@ export type UseRenameOptions = {
   basePath?: string;
 };
 
-export type RenameOutcome =
-  | { ok: true; row: Row | null }
-  | { ok: false };
+export type RenameOutcome = { ok: true; row: Row | null } | { ok: false };
 
 export type UseRenameResult = {
   /**
@@ -36,10 +34,7 @@ export type UseRenameResult = {
    * server response (so the new slug propagates). On failure: rolls
    * back to the pre-call snapshot.
    */
-  rename: (
-    rowId: string | number,
-    newLabel: string,
-  ) => Promise<RenameOutcome>;
+  rename: (rowId: string | number, newLabel: string) => Promise<RenameOutcome>;
 };
 
 export function useRename({

@@ -15,21 +15,19 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   AddButton,
   type Row,
+  type UseResourceResult,
+  useDelete,
   useDndPositions,
   useFilter,
-  useRename,
-  type UseResourceResult,
+  useSwipeToReveal,
 } from "pues/base/objects";
 import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { countTodos } from "../../lib/todos.js";
 import type { ListEntry } from "../offlineDb";
 import DragHandle from "./DragHandle";
-import EditTextDialog from "./EditTextDialog";
-import { useEscape } from "./useEscape";
-import { useSwipeToReveal } from "./useSwipeToReveal";
 
 type Props = {
   resource: UseResourceResult;
@@ -70,6 +68,11 @@ function matchListRow(row: Row, query: string): boolean {
   );
 }
 
+/** Selectors that should not initiate a swipe gesture. The pues defaults
+ * cover `.row-edit` / `.row-delete` / `.drag-handle`; these are todos'
+ * row-internal affordances. */
+const SWIPE_IGNORE = [".todo-checkbox", "a.text-inline-link"];
+
 export default function Lists({
   resource,
   onSelect,
@@ -78,10 +81,7 @@ export default function Lists({
   visible,
 }: Props) {
   const dnd = useDndPositions({ name: "lists", resource });
-  const { rename } = useRename({ resource, resourceName: "lists" });
-
-  const [renameRow, setRenameRow] = useState<Row | null>(null);
-  const [renameText, setRenameText] = useState("");
+  const { del } = useDelete({ resource, resourceName: "lists" });
 
   const { active: filterActive, visibleRows } = useFilter(
     resource.rows,
@@ -103,43 +103,6 @@ export default function Lists({
     return () => cancelAnimationFrame(id);
   }, [visible, filterInputRef]);
 
-  useEscape(!!renameRow, () => setRenameRow(null));
-
-  const handleDelete = async (row: Row) => {
-    // Optimistic remove — the server echo over SSE is dropped as our own
-    // (X-Op-Id round-trip), so local state must change here, not via SSE.
-    const opId = resource.newOpId();
-    const snapshot = resource.rows;
-    resource.mutate((prev) => prev.filter((r) => r.id !== row.id));
-    const res = await fetch(
-      `/api/lists/${encodeURIComponent(String(row.id))}`,
-      {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "X-Op-Id": opId },
-      },
-    );
-    if (!res.ok) {
-      resource.mutate(snapshot);
-    }
-  };
-
-  const openRename = (row: Row) => {
-    setRenameRow(row);
-    setRenameText(row.label);
-  };
-
-  const saveRename = async () => {
-    if (!renameRow) return;
-    const trimmed = renameText.trim();
-    if (!trimmed || trimmed === renameRow.label) {
-      setRenameRow(null);
-      return;
-    }
-    setRenameRow(null);
-    await rename(renameRow.id, trimmed);
-  };
-
   return (
     <div className="screen screen--home">
       {filterActive ? (
@@ -149,8 +112,7 @@ export default function Lists({
               key={String(row.id)}
               row={row}
               onSelect={() => onSelect(rowToListEntry(row))}
-              onEdit={() => openRename(row)}
-              onDelete={() => void handleDelete(row)}
+              onDelete={() => void del(row.id)}
             />
           ))}
         </ul>
@@ -169,8 +131,7 @@ export default function Lists({
                   key={String(row.id)}
                   row={row}
                   onSelect={() => onSelect(rowToListEntry(row))}
-                  onEdit={() => openRename(row)}
-                  onDelete={() => void handleDelete(row)}
+                  onDelete={() => void del(row.id)}
                 />
               ))}
             </ul>
@@ -203,17 +164,6 @@ export default function Lists({
         <p className="links-list-theme-label">Theme</p>
         <ThemeChooser endpoint="/t/settings/me" />
       </div>
-
-      {renameRow && (
-        <EditTextDialog
-          title="Edit list"
-          placeholder="List name"
-          text={renameText}
-          onChange={setRenameText}
-          onSave={saveRename}
-          onClose={() => setRenameRow(null)}
-        />
-      )}
     </div>
   );
 }
@@ -221,12 +171,10 @@ export default function Lists({
 function SortableListRow({
   row,
   onSelect,
-  onEdit,
   onDelete,
 }: {
   row: Row;
   onSelect: () => void;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
   const {
@@ -238,8 +186,9 @@ function SortableListRow({
     isDragging,
   } = useSortable({ id: String(row.id) });
 
-  const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
-    actionCount: 2,
+  const { sliderStyle, slideHandlers, handleClick } = useSwipeToReveal({
+    actionCount: 1,
+    ignoreSelectors: SWIPE_IGNORE,
   });
 
   const text = typeof row.text === "string" ? row.text : "";
@@ -265,16 +214,6 @@ function SortableListRow({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="row-edit"
-          onClick={() => {
-            reset();
-            onEdit();
-          }}
-        >
-          Edit
-        </button>
         <button type="button" className="row-delete" onClick={onDelete}>
           Delete
         </button>
@@ -287,16 +226,15 @@ function SortableListRow({
 function StaticListRow({
   row,
   onSelect,
-  onEdit,
   onDelete,
 }: {
   row: Row;
   onSelect: () => void;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { sliderStyle, slideHandlers, reset, handleClick } = useSwipeToReveal({
-    actionCount: 2,
+  const { sliderStyle, slideHandlers, handleClick } = useSwipeToReveal({
+    actionCount: 1,
+    ignoreSelectors: SWIPE_IGNORE,
   });
   const text = typeof row.text === "string" ? row.text : "";
   const { total, done } = countTodos(text);
@@ -324,16 +262,6 @@ function StaticListRow({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="row-edit"
-          onClick={() => {
-            reset();
-            onEdit();
-          }}
-        >
-          Edit
-        </button>
         <button type="button" className="row-delete" onClick={onDelete}>
           Delete
         </button>

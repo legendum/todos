@@ -129,9 +129,7 @@ export default function App() {
   // state + URL, and migrates the offlineDb cache when the slug changes.
   useEffect(() => {
     if (!selectedList) return;
-    const row = resource.rows.find(
-      (r) => String(r.id) === selectedList.ulid,
-    );
+    const row = resource.rows.find((r) => String(r.id) === selectedList.ulid);
     if (!row) return;
     const newName = row.label;
     const rowSlug = typeof row.slug === "string" ? row.slug : null;

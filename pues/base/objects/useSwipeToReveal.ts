@@ -1,3 +1,23 @@
+/**
+ * `useSwipeToReveal` — pointer + touch swipe-to-reveal gesture on a row,
+ * lifted as-is from the byte-identical copies that lived in
+ * `todos/src/web/components/useSwipeToReveal.ts` and the matching fifos
+ * file. Pure mechanism: returns offset/handlers/reset/handleClick — the
+ * consumer renders whatever action buttons live in the revealed area.
+ *
+ * Wiring (consumer side):
+ * - Spread `slideHandlers` onto the sliding row (the layer that
+ *   translates).
+ * - Apply `sliderStyle` to that same element.
+ * - Render action buttons (Edit, Delete, Copy, …) behind the row; size
+ *   them in CSS to match `BUTTON_WIDTH * actionCount` and the
+ *   `.row-edit` / `.row-delete` class names this hook detects in
+ *   `onPointerDown` (so taps on the buttons don't start a drag).
+ * - Call `handleClick(onSelect)` from the row's `onClick` — it skips
+ *   when the gesture was a swipe and closes when the row is already
+ *   open.
+ */
+
 import { useCallback, useRef, useState } from "react";
 
 const BUTTON_WIDTH = 72;
@@ -20,11 +40,35 @@ export type SwipeToRevealResult = {
 
 type GestureMode = "pending" | "horizontal" | "vertical";
 
+/**
+ * Selectors that, when the pointerdown target sits inside one, skip the
+ * gesture entirely (the pointer is interacting with a non-row affordance
+ * — action button, drag handle, etc.). The default list covers what
+ * pues itself implies: the revealed action buttons and the dnd-kit
+ * drag handle. Consumers extend it with their own row-internal
+ * affordances (todos: checkbox + inline links; fifos: similar; …).
+ */
+const DEFAULT_IGNORE_SELECTORS = [
+  "button.row-edit",
+  "button.row-delete",
+  ".drag-handle",
+];
+
+export type UseSwipeToRevealOptions = {
+  actionCount?: number;
+  /** Selectors layered on top of `DEFAULT_IGNORE_SELECTORS`. A pointerdown
+   * whose target sits inside any of them is treated as a non-drag. */
+  ignoreSelectors?: string[];
+};
+
 export function useSwipeToReveal(
-  options: { actionCount?: number } = {},
+  options: UseSwipeToRevealOptions = {},
 ): SwipeToRevealResult {
-  const { actionCount = 1 } = options;
+  const { actionCount = 1, ignoreSelectors } = options;
   const actionsWidth = BUTTON_WIDTH * actionCount;
+  const allIgnoreSelectors = ignoreSelectors
+    ? [...DEFAULT_IGNORE_SELECTORS, ...ignoreSelectors]
+    : DEFAULT_IGNORE_SELECTORS;
   const snapThreshold = actionsWidth / 2;
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -51,27 +95,25 @@ export function useSwipeToReveal(
     setDragging(false);
   }, [actionsWidth, snapThreshold]);
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    mode.current = "pending";
-    swiped.current = false;
-    const target = e.target as HTMLElement;
-    if (
-      target.closest?.("button.row-delete") ||
-      target.closest?.("button.row-edit")
-    )
-      return;
-    if (target.closest?.(".drag-handle")) return;
-    if (target.closest?.(".todo-checkbox")) return;
-    if (target.closest?.("a.text-inline-link")) return;
-    if (e.pointerType === "mouse") e.preventDefault();
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      offset: offsetRef.current,
-      pointerId: e.pointerId,
-    };
-    setDragging(true);
-  }, []);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      mode.current = "pending";
+      swiped.current = false;
+      const target = e.target as HTMLElement;
+      for (const selector of allIgnoreSelectors) {
+        if (target.closest?.(selector)) return;
+      }
+      if (e.pointerType === "mouse") e.preventDefault();
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        offset: offsetRef.current,
+        pointerId: e.pointerId,
+      };
+      setDragging(true);
+    },
+    [allIgnoreSelectors],
+  );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -108,7 +150,7 @@ export function useSwipeToReveal(
       );
       setOffset(next);
     },
-    [onPointerUp],
+    [onPointerUp, actionsWidth],
   );
 
   const sliderStyle: React.CSSProperties = {
@@ -144,4 +186,32 @@ export function useSwipeToReveal(
       onPointerCancel: onPointerUp,
     },
   };
+}
+
+/**
+ * Pure helpers — exported for testability. The hook above bakes these
+ * into its closure; consumers don't need them directly.
+ */
+
+export function clampSwipeOffset(
+  startOffset: number,
+  dx: number,
+  actionsWidth: number,
+): number {
+  return Math.max(-actionsWidth, Math.min(0, startOffset + dx));
+}
+
+export function shouldSnapOpen(offset: number, actionsWidth: number): boolean {
+  return offset < -(actionsWidth / 2);
+}
+
+export function detectGestureMode(
+  dx: number,
+  dy: number,
+  threshold = DIRECTION_THRESHOLD,
+): GestureMode {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax < threshold && ay < threshold) return "pending";
+  return ay > ax ? "vertical" : "horizontal";
 }

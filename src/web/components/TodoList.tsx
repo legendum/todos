@@ -19,11 +19,7 @@ import {
   type UseResourceResult,
 } from "pues/base/objects";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  getMarkdown,
-  type ListEntry,
-  saveMarkdown,
-} from "../offlineDb";
+import { getMarkdown, type ListEntry, saveMarkdown } from "../offlineDb";
 import CheckIcon from "./CheckIcon";
 import CopyIcon from "./CopyIcon";
 import { DocHistoryRedoArrow, DocHistoryUndoArrow } from "./DocHistoryArrows";
