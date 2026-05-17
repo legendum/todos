@@ -7,14 +7,28 @@ const OPTIONS: { value: ThemePref; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-export function ThemeChooser({ endpoint }: { endpoint?: string }) {
+export type ThemeChooserProps = {
+  endpoint?: string;
+  /** Override the `fetch` implementation for the persistence PATCH. Pass
+   * a consumer-supplied wrapper (e.g. one that handles 401s centrally)
+   * to fold theme persistence into app-wide HTTP policy. Theme reads no
+   * context, so `base/theme/` stays vendorable without `base/objects/`.
+   * Defaults to the global `fetch`. */
+  fetch?: typeof fetch;
+};
+
+export function ThemeChooser({
+  endpoint,
+  fetch: fetchOverride,
+}: ThemeChooserProps) {
+  const fetchImpl = fetchOverride ?? fetch;
   const [pref, setPref] = useState<ThemePref>(() => getThemePref());
 
   function choose(next: ThemePref) {
     setPref(next);
     setThemePref(next);
     if (endpoint) {
-      fetch(endpoint, {
+      fetchImpl(endpoint, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

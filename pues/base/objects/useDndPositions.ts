@@ -16,12 +16,16 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useMemo } from "react";
 
+import { usePuesFetch } from "./Pues";
 import type { UseResourceResult } from "./useResource";
 
 export type UseDndPositionsArgs<TExtra = Record<string, unknown>> = {
   name: string;
   resource: Pick<UseResourceResult<TExtra>, "rows" | "mutate" | "newOpId">;
   basePath?: string;
+  /** Override the `fetch` implementation. Falls back to the value
+   * supplied via `<Pues fetch={...}>`, then to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export type UseDndPositionsResult = {
@@ -35,6 +39,7 @@ export function useDndPositions<TExtra = Record<string, unknown>>(
   args: UseDndPositionsArgs<TExtra>,
 ): UseDndPositionsResult {
   const basePath = args.basePath ?? "/api";
+  const fetchImpl = usePuesFetch(args.fetch);
   const { rows, mutate, newOpId } = args.resource;
 
   const itemIds = useMemo(() => rows.map((r) => r.id), [rows]);
@@ -59,7 +64,7 @@ export function useDndPositions<TExtra = Record<string, unknown>>(
       // Moving down → after the target; moving up → before the target.
       const side: "before" | "after" = newIndex > oldIndex ? "after" : "before";
       const opId = newOpId();
-      fetch(`${basePath}/${args.name}/${encodeURIComponent(activeId)}`, {
+      fetchImpl(`${basePath}/${args.name}/${encodeURIComponent(activeId)}`, {
         method: "PATCH",
         credentials: "include",
         headers: {
@@ -73,7 +78,7 @@ export function useDndPositions<TExtra = Record<string, unknown>>(
         // — for v0.3.0 we keep it minimal.
       });
     },
-    [rows, mutate, newOpId, args.name, basePath],
+    [rows, mutate, newOpId, args.name, basePath, fetchImpl],
   );
 
   return { itemIds, onDragEnd };

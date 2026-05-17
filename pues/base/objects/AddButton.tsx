@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from "react";
 
+import { usePuesFetch } from "./Pues";
 import { type Row, useResource } from "./useResource";
 
 export type AddButtonProps = {
@@ -18,6 +19,9 @@ export type AddButtonProps = {
   basePath?: string;
   /** Receive the optimistically-inserted row (e.g. to navigate to it). */
   onCreated?: (row: Row) => void;
+  /** Override the `fetch` implementation. Falls back to the value
+   * supplied via `<Pues fetch={...}>`, then to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export function AddButton({
@@ -27,8 +31,10 @@ export function AddButton({
   placeholder = "New item",
   basePath = "/api",
   onCreated,
+  fetch: fetchOverride,
 }: AddButtonProps) {
-  const r = useResource(resource, { basePath });
+  const fetchImpl = usePuesFetch(fetchOverride);
+  const r = useResource(resource, { basePath, fetch: fetchOverride });
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +55,7 @@ export function AddButton({
     r.mutate((prev) => [...prev, optimistic]);
 
     try {
-      const res = await fetch(`${basePath}/${resource}`, {
+      const res = await fetchImpl(`${basePath}/${resource}`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -87,7 +93,7 @@ export function AddButton({
     } finally {
       setBusy(false);
     }
-  }, [value, busy, r, basePath, resource, onCreated]);
+  }, [value, busy, r, basePath, resource, onCreated, fetchImpl]);
 
   if (open) {
     return (

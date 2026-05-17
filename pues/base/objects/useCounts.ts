@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type SseEventHandler, useSSE } from "../sse/useSSE";
+import { usePuesFetch } from "./Pues";
 
 export type CountsRow = {
   /** Present only for parent-scoped resources. */
@@ -39,6 +40,9 @@ export type UseCountsOptions = {
   /** If false, the hook neither fetches nor subscribes to SSE. When it
    *  flips back to true, the fetch fires. Defaults to true. */
   enabled?: boolean;
+  /** Override the `fetch` implementation. Falls back to the value
+   * supplied via `<Pues fetch={...}>`, then to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export type UseCountsResult = {
@@ -53,6 +57,7 @@ export function useCounts(opts: UseCountsOptions): UseCountsResult {
   const ssePath = opts.ssePath ?? "/api/events";
   const enabled = opts.enabled ?? true;
   const debounceMs = opts.debounceMs ?? 250;
+  const fetchImpl = usePuesFetch(opts.fetch);
 
   const [rows, setRows] = useState<CountsRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +76,7 @@ export function useCounts(opts: UseCountsOptions): UseCountsResult {
     const myTick = ++tickRef.current;
     setLoading(true);
     setError(null);
-    fetch(url, { credentials: "include" })
+    fetchImpl(url, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -86,7 +91,7 @@ export function useCounts(opts: UseCountsOptions): UseCountsResult {
         setError(e);
         setLoading(false);
       });
-  }, [url, enabled, reloadTick]);
+  }, [url, enabled, reloadTick, fetchImpl]);
 
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
 

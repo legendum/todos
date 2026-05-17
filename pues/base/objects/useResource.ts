@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type UseSSEResult, useSSE } from "../sse/useSSE";
+import { usePuesFetch } from "./Pues";
 import type { WireRow } from "./wire";
 
 /** Client alias for the wire row shape — a thin re-export so server and
@@ -70,6 +71,11 @@ export type UseResourceOptions = {
    * contain rows that don't match the active filter; consumers re-filter at
    * render time if it matters). */
   filters?: Record<string, string | number>;
+  /** Override the `fetch` implementation used for the initial GET and
+   * `loadMore`. Pass a consumer-supplied wrapper (e.g. one that catches
+   * 401s for centralized logout) to participate in app-wide HTTP policy.
+   * Defaults to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export function useResource<TExtra = Record<string, unknown>>(
@@ -84,6 +90,7 @@ export function useResource<TExtra = Record<string, unknown>>(
   const pageSize = options.pageSize;
   const paginated = typeof pageSize === "number" && pageSize > 0;
   const filters = options.filters;
+  const fetchImpl = usePuesFetch(options.fetch);
   // Filters trigger refetch on change; use a stable JSON serialization as
   // the effect-dep key so {status: "todo"} and {status: "todo"} compare
   // equal across renders.
@@ -127,7 +134,7 @@ export function useResource<TExtra = Record<string, unknown>>(
     setLoading(true);
     setError(null);
     setHasMore(false);
-    fetch(buildUrl(), { credentials: "include" })
+    fetchImpl(buildUrl(), { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -156,6 +163,7 @@ export function useResource<TExtra = Record<string, unknown>>(
     pageSize,
     filtersKey,
     buildUrl,
+    fetchImpl,
   ]);
 
   const loadMore = useCallback(() => {
@@ -164,7 +172,7 @@ export function useResource<TExtra = Record<string, unknown>>(
     const last = rows[rows.length - 1];
     if (!last) return;
     setLoadingMore(true);
-    fetch(buildUrl({ after_position: last.position }), {
+    fetchImpl(buildUrl({ after_position: last.position }), {
       credentials: "include",
     })
       .then((r) => {
@@ -185,7 +193,16 @@ export function useResource<TExtra = Record<string, unknown>>(
       .catch(() => {
         setLoadingMore(false);
       });
-  }, [paginated, enabled, loadingMore, hasMore, rows, buildUrl, pageSize]);
+  }, [
+    paginated,
+    enabled,
+    loadingMore,
+    hasMore,
+    rows,
+    buildUrl,
+    pageSize,
+    fetchImpl,
+  ]);
 
   const handlers = useMemo(() => {
     // SPEC §5.8: when this hook is bound to a parent-scoped view via

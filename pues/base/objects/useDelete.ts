@@ -13,6 +13,7 @@
 
 import { useCallback } from "react";
 
+import { usePuesFetch } from "./Pues";
 import type { Row, UseResourceResult } from "./useResource";
 
 export type UseDeleteOptions<TExtra = Record<string, unknown>> = {
@@ -21,6 +22,9 @@ export type UseDeleteOptions<TExtra = Record<string, unknown>> = {
   resourceName: string;
   /** Defaults to "/api". Must match the `useResource` basePath. */
   basePath?: string;
+  /** Override the `fetch` implementation. Falls back to the value
+   * supplied via `<Pues fetch={...}>`, then to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export type DeleteOutcome = { ok: true } | { ok: false };
@@ -70,11 +74,13 @@ export function useDelete<TExtra = Record<string, unknown>>({
   resource,
   resourceName,
   basePath = "/api",
+  fetch: fetchOverride,
 }: UseDeleteOptions<TExtra>): UseDeleteResult {
+  const fetchImpl = usePuesFetch(fetchOverride);
   const del = useCallback(
     (rowId: Row["id"]) =>
-      performDelete(resource, rowId, resourceName, basePath),
-    [resource, resourceName, basePath],
+      performDelete(resource, rowId, resourceName, basePath, fetchImpl),
+    [resource, resourceName, basePath, fetchImpl],
   );
 
   return { del };

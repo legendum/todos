@@ -15,6 +15,7 @@
 
 import { useCallback } from "react";
 
+import { usePuesFetch } from "./Pues";
 import type { Row, UseResourceResult } from "./useResource";
 
 export type UseRenameOptions<TExtra = Record<string, unknown>> = {
@@ -23,6 +24,9 @@ export type UseRenameOptions<TExtra = Record<string, unknown>> = {
   resourceName: string;
   /** Defaults to "/api". Must match the `useResource` basePath. */
   basePath?: string;
+  /** Override the `fetch` implementation. Falls back to the value
+   * supplied via `<Pues fetch={...}>`, then to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 export type RenameOutcome<TExtra = Record<string, unknown>> =
@@ -54,7 +58,9 @@ export function useRename<TExtra = Record<string, unknown>>({
   resource,
   resourceName,
   basePath = "/api",
+  fetch: fetchOverride,
 }: UseRenameOptions<TExtra>): UseRenameResult<TExtra> {
+  const fetchImpl = usePuesFetch(fetchOverride);
   const rename = useCallback(
     async (
       rowId: string | number,
@@ -76,7 +82,7 @@ export function useRename<TExtra = Record<string, unknown>>({
         ),
       );
 
-      const res = await fetch(
+      const res = await fetchImpl(
         `${basePath}/${resourceName}/${encodeURIComponent(String(rowId))}`,
         {
           method: "PATCH",
@@ -114,7 +120,7 @@ export function useRename<TExtra = Record<string, unknown>>({
 
       return { ok: true, row };
     },
-    [resource, resourceName, basePath],
+    [resource, resourceName, basePath, fetchImpl],
   );
 
   return { rename };

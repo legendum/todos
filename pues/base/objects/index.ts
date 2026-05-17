@@ -34,6 +34,7 @@ export {
   type RowRenderContext,
   type RowRenderer,
 } from "./ObjectList";
+export { Pues, type PuesProps, usePuesFetch } from "./Pues";
 export {
   appendPosition,
   computeRelativePosition,
