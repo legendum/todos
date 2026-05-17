@@ -12,11 +12,11 @@
  *
  *   options.fetch  >  <Pues fetch={...}>  >  globalThis.fetch
  *
- * Lives in `base/objects/` because the vendor script copies subdirs
- * wholesale (see fifos/scripts/pues.ts) and this is where the bulk of
- * fetch-using hooks live. `<ThemeChooser>` does not read context — it
- * accepts an explicit `fetch?` prop instead, keeping `base/theme/`
- * vendorable without `base/objects/`.
+ * Lives in `base/core/` — the *bord* of the smörgåsbord. Other parts
+ * (`base/objects/`, `base/theme/`, future `base/auth/`, …) depend on
+ * `core` to share this app-root context without prop-drilling. A
+ * consumer that wants pues at all vendors `core` plus whichever feature
+ * parts it uses.
  */
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";

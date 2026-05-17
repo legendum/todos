@@ -15,8 +15,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { usePuesFetch } from "../core/Pues";
 import { type SseEventHandler, useSSE } from "../sse/useSSE";
-import { usePuesFetch } from "./Pues";
 
 export type CountsRow = {
   /** Present only for parent-scoped resources. */

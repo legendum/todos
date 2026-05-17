@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from "react";
 
-import { usePuesFetch } from "./Pues";
+import { usePuesFetch } from "../core/Pues";
 import { type Row, useResource } from "./useResource";
 
 export type AddButtonProps = {

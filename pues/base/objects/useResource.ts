@@ -10,8 +10,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { usePuesFetch } from "../core/Pues";
 import { type UseSSEResult, useSSE } from "../sse/useSSE";
-import { usePuesFetch } from "./Pues";
 import type { WireRow } from "./wire";
 
 /** Client alias for the wire row shape — a thin re-export so server and

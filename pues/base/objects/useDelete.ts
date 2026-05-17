@@ -13,7 +13,7 @@
 
 import { useCallback } from "react";
 
-import { usePuesFetch } from "./Pues";
+import { usePuesFetch } from "../core/Pues";
 import type { Row, UseResourceResult } from "./useResource";
 
 export type UseDeleteOptions<TExtra = Record<string, unknown>> = {

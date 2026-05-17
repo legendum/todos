@@ -16,7 +16,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useMemo } from "react";
 
-import { usePuesFetch } from "./Pues";
+import { usePuesFetch } from "../core/Pues";
 import type { UseResourceResult } from "./useResource";
 
 export type UseDndPositionsArgs<TExtra = Record<string, unknown>> = {
