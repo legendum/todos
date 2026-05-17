@@ -132,7 +132,22 @@ export type BeforeDeleteHook = (
 ) => undefined | Response | Promise<undefined | Response>;
 
 export type MountResourceArgs = {
-  db: Database;
+  /**
+   * The application database, or a getter that returns the current one.
+   *
+   * Either form works for production. The getter form (`db: getDb`) lets
+   * callers swap the underlying `Database` instance across test files
+   * (or any other lifecycle event) without leaving pues holding a stale
+   * `Statement` reference — Bun finalizes a Database's prepared statements
+   * when it closes, so a long-lived `Database` reference becomes unusable
+   * after `db.close()`. The getter form re-resolves on every handler call.
+   *
+   * Bun caches `Statement` per (Database, sql) so the per-call overhead is
+   * a Map lookup, not a re-parse — there is no perf reason to prefer the
+   * eager form. The `Database` form is kept for the common single-DB case
+   * where call sites want to pass the value they already have.
+   */
+  db: Database | (() => Database);
   name: string;
   config: ResourceConfig;
   /** Required when `config.parent` is set (SPEC §5.8). Pre-resolved parent
@@ -160,7 +175,13 @@ const MAX_LIMIT = 1000;
 const q = quoteIdent;
 
 export function mountResource(args: MountResourceArgs): RouteMap {
-  const cols = resolveColumns(args.db, args.name, args.config, args.parentCols);
+  // Normalize `db` to a getter. Handlers call `getDb()` each invocation so
+  // they always see the current `Database` — see MountResourceArgs.db.
+  const getDb: () => Database =
+    typeof args.db === "function" ? args.db : () => args.db as Database;
+
+  // resolveColumns runs PRAGMA table_info at mount time; needs a live db now.
+  const cols = resolveColumns(getDb(), args.name, args.config, args.parentCols);
   const auth = { ...DEFAULT_AUTH, ...(args.auth ?? {}) };
   const mintId = args.newId ?? defaultNewId;
   const broadcast = args.broadcast;
@@ -175,31 +196,25 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     );
   }
 
+  // SQL strings precomputed at mount; the prepared `Statement` is resolved
+  // per-call via `getDb().query(sql)`. Bun caches by (Database, sql), so
+  // repeated calls hit the cache after the first prepare.
   const selectSql = buildSelectSql(cols, auth.get);
-  const selectStmt = args.db.query(selectSql);
   const findOneSql = buildFindOneSql(cols);
-  const findOneStmt = args.db.query(findOneSql);
-
-  // For parent-scoped resources: resolve the parent's numeric pk from the
-  // URL param + authenticated userId. Used on POST (before INSERT) and as
-  // the value bound to `<child>.<parent.column>` on writes. SELECT/findOne
-  // do the authorization through the JOIN, so they do not call this.
-  const parentPkStmt = cols.parent
-    ? args.db.query(
-        `SELECT ${q(cols.parent.pk)} AS pk FROM ${q(cols.parent.table)} WHERE ${q(cols.parent.public_id)} = ? AND ${q(cols.parent.owner)} = ?`,
-      )
+  const parentPkSql = cols.parent
+    ? `SELECT ${q(cols.parent.pk)} AS pk FROM ${q(cols.parent.table)} WHERE ${q(cols.parent.public_id)} = ? AND ${q(cols.parent.owner)} = ?`
     : null;
 
   function resolveParentPk(
     req: Request & { params?: Record<string, string> },
     ownerId: number,
   ): unknown | Response {
-    if (!cols.parent || !parentPkStmt) return null;
+    if (!cols.parent || !parentPkSql) return null;
     const parentPublicId = req.params?.[cols.parent.param];
     if (!parentPublicId) {
       return jsonError(400, `parent ${cols.parent.param} required`);
     }
-    const row = parentPkStmt.get(parentPublicId, ownerId) as
+    const row = getDb().query(parentPkSql).get(parentPublicId, ownerId) as
       | { pk: unknown }
       | undefined;
     if (!row) return jsonError(404, "not_found");
@@ -226,32 +241,34 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       if (!parentPublicId) {
         return jsonError(400, `parent ${cols.parent.param} required`);
       }
-      rows = selectStmt.all(
-        parentPublicId,
-        ownerId,
-        afterPosition,
-        afterPosition,
-        ...filters,
-        limit,
-        offset,
-      ) as Array<Record<string, unknown>>;
+      rows = getDb()
+        .query(selectSql)
+        .all(
+          parentPublicId,
+          ownerId,
+          afterPosition,
+          afterPosition,
+          ...filters,
+          limit,
+          offset,
+        ) as Array<Record<string, unknown>>;
     } else if (auth.get === "user") {
-      rows = selectStmt.all(
-        ownerId,
-        afterPosition,
-        afterPosition,
-        ...filters,
-        limit,
-        offset,
-      ) as Array<Record<string, unknown>>;
+      rows = getDb()
+        .query(selectSql)
+        .all(
+          ownerId,
+          afterPosition,
+          afterPosition,
+          ...filters,
+          limit,
+          offset,
+        ) as Array<Record<string, unknown>>;
     } else {
-      rows = selectStmt.all(
-        afterPosition,
-        afterPosition,
-        ...filters,
-        limit,
-        offset,
-      ) as Array<Record<string, unknown>>;
+      rows = getDb()
+        .query(selectSql)
+        .all(afterPosition, afterPosition, ...filters, limit, offset) as Array<
+        Record<string, unknown>
+      >;
     }
     return Response.json(rows.map((r) => toWire(r, cols)));
   };
@@ -299,7 +316,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       ownerId: ownerId as number,
       parentId: parentPk,
     };
-    const position = appendPosition(args.db, cols, scope);
+    const position = appendPosition(getDb(), cols, scope);
 
     const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
     const insertCols: string[] = [scopeColName, cols.public_id, cols.position];
@@ -343,13 +360,17 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     }
 
     const sql = `INSERT INTO ${q(cols.table)} (${insertCols.map(q).join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`;
-    args.db.run(sql, ...(insertBinds as []));
+    getDb().run(sql, ...(insertBinds as []));
 
     const row = cols.parent
-      ? (findOneStmt.get(id, req.params?.[cols.parent.param], ownerId) as
+      ? (getDb()
+          .query(findOneSql)
+          .get(id, req.params?.[cols.parent.param], ownerId) as
           | Record<string, unknown>
           | undefined)
-      : (findOneStmt.get(id, ownerId) as Record<string, unknown> | undefined);
+      : (getDb().query(findOneSql).get(id, ownerId) as
+          | Record<string, unknown>
+          | undefined);
     if (!row) return jsonError(500, "insert succeeded but row not found");
     const wire = toWire(row, cols);
     broadcast?.(ownerId as number, `${resourceName}.created`, wire, {
@@ -378,10 +399,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     if (body instanceof Response) return body;
 
     const existing = cols.parent
-      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+      ? (getDb().query(findOneSql).get(publicId, parentPublicId, ownerId) as
           | Record<string, unknown>
           | undefined)
-      : (findOneStmt.get(publicId, ownerId) as
+      : (getDb().query(findOneSql).get(publicId, ownerId) as
           | Record<string, unknown>
           | undefined);
     if (!existing) return jsonError(404, "not_found");
@@ -445,7 +466,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
 
     if (typeof body.before === "string" || typeof body.before === "number") {
       const r = computeRelativePosition(
-        args.db,
+        getDb(),
         cols,
         scope,
         existingPk,
@@ -461,7 +482,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
       typeof body.after === "number"
     ) {
       const r = computeRelativePosition(
-        args.db,
+        getDb(),
         cols,
         scope,
         existingPk,
@@ -491,25 +512,28 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     }
 
     const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
-    const tx = args.db.transaction(() => {
+    // Resolve the db once for the transaction so the BEGIN/COMMIT and the
+    // statements inside all execute on the same instance.
+    const txDb = getDb();
+    const tx = txDb.transaction(() => {
       const updateSql = `UPDATE ${q(cols.table)} SET ${setCols
         .map((c) => `${q(c)} = ?`)
         .join(", ")} WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
-      args.db.run(updateSql, ...(setBinds as []), existingPk, scopeBindValue);
+      txDb.run(updateSql, ...(setBinds as []), existingPk, scopeBindValue);
       if (reorderRenumber.length > 0) {
         const upPosSql = `UPDATE ${q(cols.table)} SET ${q(cols.position)} = ? WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
         for (const e of reorderRenumber) {
-          args.db.run(upPosSql, e.position, e.pk, scopeBindValue);
+          txDb.run(upPosSql, e.position, e.pk, scopeBindValue);
         }
       }
     });
     tx();
 
     const row = cols.parent
-      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+      ? (getDb().query(findOneSql).get(publicId, parentPublicId, ownerId) as
           | Record<string, unknown>
           | undefined)
-      : (findOneStmt.get(publicId, ownerId) as
+      : (getDb().query(findOneSql).get(publicId, ownerId) as
           | Record<string, unknown>
           | undefined);
     if (!row) return jsonError(500, "update succeeded but row not found");
@@ -541,7 +565,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     for (const e of reorderRenumber) {
       // Map renumbered rows' public_ids by re-reading; cheaper alternative is
       // to include public_id in the renumber list. For now, run one lookup.
-      const sib = args.db
+      const sib = getDb()
         .query(
           `SELECT ${q(cols.public_id)} AS pid FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ?`,
         )
@@ -594,17 +618,17 @@ export function mountResource(args: MountResourceArgs): RouteMap {
         `JOIN ${parentTbl} ON ${child}.${q(cols.parent.column)} = ${parentTbl}.${q(cols.parent.pk)} ` +
         `WHERE ${parentTbl}.${q(cols.parent.owner)} = ? ${buildFilterClauses(cols)} ` +
         `GROUP BY ${parentTbl}.${q(cols.parent.public_id)}, ${child}.${q(by)}`;
-      rowsOut = args.db.query(sql).all(ownerId, ...filters) as Array<
-        Record<string, unknown>
-      >;
+      rowsOut = getDb()
+        .query(sql)
+        .all(ownerId, ...filters) as Array<Record<string, unknown>>;
     } else {
       const sql =
         `SELECT ${q(by)} AS value, COUNT(*) AS n FROM ${q(cols.table)} ` +
         `WHERE ${q(cols.owner!)} = ? ${buildFilterClauses(cols)} ` +
         `GROUP BY ${q(by)}`;
-      rowsOut = args.db.query(sql).all(ownerId, ...filters) as Array<
-        Record<string, unknown>
-      >;
+      rowsOut = getDb()
+        .query(sql)
+        .all(ownerId, ...filters) as Array<Record<string, unknown>>;
     }
     return Response.json(rowsOut);
   };
@@ -624,10 +648,10 @@ export function mountResource(args: MountResourceArgs): RouteMap {
     const parentPk = parentPkOrResponse as number | null;
     const opId = getOpId(req);
     const existing = cols.parent
-      ? (findOneStmt.get(publicId, parentPublicId, ownerId) as
+      ? (getDb().query(findOneSql).get(publicId, parentPublicId, ownerId) as
           | Record<string, unknown>
           | undefined)
-      : (findOneStmt.get(publicId, ownerId) as
+      : (getDb().query(findOneSql).get(publicId, ownerId) as
           | Record<string, unknown>
           | undefined);
     if (!existing) return jsonError(404, "not_found");
@@ -647,7 +671,7 @@ export function mountResource(args: MountResourceArgs): RouteMap {
 
     const scopeBindValue: unknown = cols.parent ? parentPk : ownerId;
     const sql = `DELETE FROM ${q(cols.table)} WHERE ${q(cols.pk)} = ? AND ${q(scopeColName)} = ?`;
-    args.db.run(sql, existing.pk_value, scopeBindValue);
+    getDb().run(sql, existing.pk_value, scopeBindValue);
     broadcast?.(
       ownerId as number,
       `${resourceName}.deleted`,

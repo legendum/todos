@@ -35,10 +35,18 @@ export type UseRenameResult<TExtra = Record<string, unknown>> = {
    * On success: rows updated optimistically, then replaced with the
    * server response (so the new slug propagates). On failure: rolls
    * back to the pre-call snapshot.
+   *
+   * `extra` is merged into the PATCH body alongside `label` and applied
+   * to the optimistic row update. Use for consumer-specific fields that
+   * the dialog edits alongside the label (e.g. fifos' `max_retries`).
+   * Server-side, the resource's `beforeUpdate` hook is responsible for
+   * validating and persisting them. Do not put `label` in `extra` — it
+   * is set from the `newLabel` argument; collisions are not defined.
    */
   rename: (
     rowId: string | number,
     newLabel: string,
+    extra?: Record<string, unknown>,
   ) => Promise<RenameOutcome<TExtra>>;
 };
 
@@ -51,6 +59,7 @@ export function useRename<TExtra = Record<string, unknown>>({
     async (
       rowId: string | number,
       newLabel: string,
+      extra?: Record<string, unknown>,
     ): Promise<RenameOutcome<TExtra>> => {
       const trimmed = newLabel.trim();
       if (!trimmed) return { ok: false };
@@ -58,10 +67,13 @@ export function useRename<TExtra = Record<string, unknown>>({
       const opId = resource.newOpId();
       const snapshot = resource.rows;
 
-      // Optimistic: update the label immediately. The slug (if any) is
-      // still old here — the server-blessed row replaces this below.
+      // Optimistic: update the label (and any extras) immediately. The
+      // slug (if any) is still old here — the server-blessed row
+      // replaces this below.
       resource.mutate((prev) =>
-        prev.map((r) => (r.id === rowId ? { ...r, label: trimmed } : r)),
+        prev.map((r) =>
+          r.id === rowId ? { ...r, ...(extra ?? {}), label: trimmed } : r,
+        ),
       );
 
       const res = await fetch(
@@ -73,7 +85,7 @@ export function useRename<TExtra = Record<string, unknown>>({
             "Content-Type": "application/json",
             "X-Op-Id": opId,
           },
-          body: JSON.stringify({ label: trimmed }),
+          body: JSON.stringify({ ...(extra ?? {}), label: trimmed }),
         },
       );
 

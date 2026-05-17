@@ -61,8 +61,12 @@ export function AddButton({
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try {
-          const j = (await res.json()) as { error?: string };
-          if (j?.error) msg = j.error;
+          const j = (await res.json()) as { error?: string; message?: string };
+          // Prefer the human-readable `message` (e.g. "A fifo with URL X
+          // already exists"); fall back to the `error` code if a
+          // consumer only sends one. Same wire shape across the fleet.
+          if (j?.message) msg = j.message;
+          else if (j?.error) msg = j.error;
         } catch {
           /* keep msg */
         }
