@@ -8,11 +8,11 @@ import {
   withSelfHostedSession,
 } from "pues/base/auth/server";
 import { isSelfHosted } from "pues/base/core";
+import { getDb } from "pues/base/db/server";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
 import { mountPwaRoutes } from "pues/base/pwa/server";
 import { chargeListCreate, closeTabs } from "../lib/billing.js";
 import { PORT } from "../lib/constants.js";
-import { getDb } from "../lib/db.js";
 import { countListsForUser, MAX_LISTS_PER_USER } from "../lib/listHistory.js";
 import { seedDefaultListsForNewUser } from "../lib/seed-default-lists.js";
 import { toSlug, validateListName } from "../lib/todos.js";

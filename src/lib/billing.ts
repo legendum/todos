@@ -1,5 +1,5 @@
 import { isSelfHosted } from "pues/base/core";
-import { getDb } from "./db.js";
+import { getDb } from "pues/base/db/server";
 
 // @ts-expect-error — pure JS SDK, vendored via pues/base/auth
 const legendum = require("../../pues/base/auth/legendum.js");

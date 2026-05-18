@@ -1,4 +1,4 @@
-import { getDb } from "./db.js";
+import { getDb } from "pues/base/db/server";
 import { toSlug } from "./todos.js";
 import { ulid } from "./ulid.js";
 

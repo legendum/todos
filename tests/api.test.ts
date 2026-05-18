@@ -9,7 +9,7 @@ let server: any;
 
 beforeAll(async () => {
   // Set up test environment — force self-hosted mode
-  process.env.TODOS_DB_PATH = TEST_DB_PATH;
+  process.env.PUES_DB_PATH = TEST_DB_PATH;
   delete process.env.LEGENDUM_API_KEY;
   delete process.env.LEGENDUM_SECRET;
 

@@ -14,8 +14,8 @@
  */
 
 import { isSelfHosted } from "pues/base/core";
+import { getDb } from "pues/base/db/server";
 import { broadcastRow } from "pues/base/objects";
-import { getDb } from "../../lib/db.js";
 import {
   applyRedo,
   applyUndo,

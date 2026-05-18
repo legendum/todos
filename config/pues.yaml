@@ -7,10 +7,17 @@ parts:
   - objects
   - sse
   - pwa
+  - db
 
 app:
   name: todos
-  db: data/todos.db
+
+# `base/db/` reads this section. SQLite WAL + foreign keys are baked
+# in; pues applies `config/schema.sql` and any pending
+# `config/migrations/*.sql` on first `getDb()`. PUES_DB_PATH env var
+# overrides the path (used by tests).
+db:
+  path: data/todos.db
 
 # `base/pwa/` reads this section. Pues bakes start_url + display +
 # icon type/purpose; everything else is per-consumer.

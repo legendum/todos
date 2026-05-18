@@ -201,7 +201,7 @@ No config file required. All configuration via environment variables:
 | `PORT` | `3000` | Server listen port |
 | `HOST` | `0.0.0.0` | Server bind host |
 | `PUES_DOMAIN` | `http://localhost:$PORT` (dev) / `https://todos.in` (prod) | Public domain (pues namespace, v0.8.0+) |
-| `TODOS_DB_PATH` | `data/todos.db` | SQLite path |
+| `PUES_DB_PATH` | `data/todos.db` (from `config/pues.yaml` `db.path`) | SQLite path override (pues namespace, v0.10.0+) |
 | `PUES_COOKIE_SECRET` | — | Required in hosted mode (pues namespace, v0.8.0+) |
 | `LEGENDUM_API_KEY` | — | If set, enables hosted mode (auth + billing). If unset, self-hosted mode. |
 | `LEGENDUM_SECRET` | — | Required when `LEGENDUM_API_KEY` is set |
@@ -228,7 +228,7 @@ Without `LEGENDUM_API_KEY`, the server runs in **self-hosted mode**: no login, n
 
 ### Backup
 
-All list data lives in a single SQLite file (`TODOS_DB_PATH`, default `data/todos.db`). To back up: stop the server and copy that file. To restore: replace the file and start again.
+All list data lives in a single SQLite file (`config/pues.yaml` → `db.path`, default `data/todos.db`; overridable via `PUES_DB_PATH`). To back up: stop the server and copy that file. To restore: replace the file and start again.
 
 ### Environment template
 

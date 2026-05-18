@@ -1,6 +1,6 @@
 import { isSelfHosted } from "pues/base/core";
+import { getDb } from "pues/base/db/server";
 import { chargeWebhookWrite } from "../../lib/billing.js";
-import { getDb } from "../../lib/db.js";
 import {
   applyRedo,
   applyUndo,
