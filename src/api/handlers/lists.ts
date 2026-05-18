@@ -43,7 +43,7 @@ type ListRow = {
  * wire row. Exported for the webhook handler which also broadcasts
  * `lists.updated` after mutating list text.
  */
-export function listRowToWire(row: ListRow) {
+function listRowToWire(row: ListRow) {
   return {
     id: row.ulid,
     label: row.name,
@@ -53,6 +53,24 @@ export function listRowToWire(row: ListRow) {
     slug: row.slug,
     text: row.text,
   };
+}
+
+/**
+ * Emit a `lists.updated` event on pues' SSE channel. Used by every
+ * bespoke path that mutates `lists.text` (the markdown editor PUT,
+ * doc-history undo/redo, and the webhook intake) so the home page
+ * stays live for done/total counts. Wraps `broadcastRow` so callers
+ * stop repeating the fixed `puesSse.broadcast / "lists" / "updated"`
+ * tokens at every site.
+ */
+export function broadcastListUpdated(row: ListRow): void {
+  broadcastRow(
+    puesSse.broadcast,
+    row.user_id,
+    "lists",
+    "updated",
+    listRowToWire(row),
+  );
 }
 
 type ListRowDocHistory = Pick<
@@ -87,13 +105,11 @@ export function runDocHistoryMutation(
     };
   }
   broadcast(row.ulid, result.newText);
-  broadcastRow(
-    puesSse.broadcast,
-    row.user_id,
-    "lists",
-    "updated",
-    listRowToWire({ ...row, text: result.newText, updated_at: result.now }),
-  );
+  broadcastListUpdated({
+    ...row,
+    text: result.newText,
+    updated_at: result.now,
+  });
   return {
     ok: true,
     newText: result.newText,
@@ -231,13 +247,7 @@ export async function replaceTodos(
   const now = Math.floor(Date.now() / 1000);
   replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(row.ulid, text);
-  broadcastRow(
-    puesSse.broadcast,
-    row.user_id,
-    "lists",
-    "updated",
-    listRowToWire({ ...row, text, updated_at: now }),
-  );
+  broadcastListUpdated({ ...row, text, updated_at: now });
 
   const { total, done } = countTodos(text);
   return json({

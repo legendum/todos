@@ -1,5 +1,4 @@
 import { isSelfHosted } from "pues/base/core";
-import { broadcastRow } from "pues/base/objects";
 import { chargeWebhookWrite } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import {
@@ -10,8 +9,7 @@ import {
 import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
-import { puesSse } from "../puesSse.js";
-import { listRowToWire, runDocHistoryMutation } from "./lists.js";
+import { broadcastListUpdated, runDocHistoryMutation } from "./lists.js";
 
 type ListRow = {
   id: number;
@@ -84,13 +82,7 @@ export async function replaceWebhookTodos(
   const now = Math.floor(Date.now() / 1000);
   replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(ulid, text);
-  broadcastRow(
-    puesSse.broadcast,
-    row.user_id,
-    "lists",
-    "updated",
-    listRowToWire({ ...row, text, updated_at: now }),
-  );
+  broadcastListUpdated({ ...row, text, updated_at: now });
 
   return markdownWebhookResponse(text, now);
 }
