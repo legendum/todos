@@ -11,7 +11,6 @@ import {
 } from "pues/base/auth";
 import { isSelfHosted } from "pues/base/core";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
-import { sseRoute } from "pues/base/sse";
 import { chargeListCreate, closeTabs } from "../lib/billing.js";
 import { PORT } from "../lib/constants.js";
 import { getDb } from "../lib/db.js";
@@ -21,7 +20,7 @@ import { toSlug, validateListName } from "../lib/todos.js";
 import * as listHandlers from "./handlers/lists.js";
 import * as webhookHandlers from "./handlers/webhook.js";
 import { json } from "./json.js";
-import { setPuesBroadcast } from "./pues-runtime.js";
+import { puesSse } from "./puesSse.js";
 
 const root = resolve(import.meta.dir, "../..");
 
@@ -41,9 +40,6 @@ if (!listsResource) {
     "config/pues.yaml: `resources.lists` is required for the /api/lists route.",
   );
 }
-
-const puesSse = sseRoute({ resolveUser });
-setPuesBroadcast(puesSse.broadcast);
 
 function rejectJson(status: number, code: string, message: string): Response {
   return new Response(JSON.stringify({ error: code, message }), {

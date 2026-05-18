@@ -9,11 +9,12 @@
  * undo/redo stacks that live in separate `undos`/`redos` tables.
  *
  * Whenever this file mutates `lists.text`, it broadcasts a canonical
- * `lists.updated` event via `broadcastListUpdated` so the home page (also
+ * `lists.updated` event via pues' `broadcastRow` so the home page (also
  * subscribed to `/api/events`) re-renders done/total counts live.
  */
 
 import { isSelfHosted } from "pues/base/core";
+import { broadcastRow } from "pues/base/objects";
 import { getDb } from "../../lib/db.js";
 import {
   applyRedo,
@@ -23,7 +24,7 @@ import {
 import { broadcast } from "../../lib/sse.js";
 import { countTodos, validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";
-import { broadcastListUpdated } from "../pues-runtime.js";
+import { puesSse } from "../puesSse.js";
 
 type ListRow = {
   id: number;
@@ -36,6 +37,23 @@ type ListRow = {
   created_at: number;
   updated_at: number;
 };
+
+/**
+ * Project a todos `ListRow` (DB-column shape) into the canonical pues
+ * wire row. Exported for the webhook handler which also broadcasts
+ * `lists.updated` after mutating list text.
+ */
+export function listRowToWire(row: ListRow) {
+  return {
+    id: row.ulid,
+    label: row.name,
+    position: row.position,
+    updated_at: row.updated_at ?? row.created_at ?? 0,
+    created_at: row.created_at ?? 0,
+    slug: row.slug,
+    text: row.text,
+  };
+}
 
 type ListRowDocHistory = Pick<
   ListRow,
@@ -69,11 +87,13 @@ export function runDocHistoryMutation(
     };
   }
   broadcast(row.ulid, result.newText);
-  broadcastListUpdated({
-    ...row,
-    text: result.newText,
-    updated_at: result.now,
-  });
+  broadcastRow(
+    puesSse.broadcast,
+    row.user_id,
+    "lists",
+    "updated",
+    listRowToWire({ ...row, text: result.newText, updated_at: result.now }),
+  );
   return {
     ok: true,
     newText: result.newText,
@@ -211,7 +231,13 @@ export async function replaceTodos(
   const now = Math.floor(Date.now() / 1000);
   replaceListTextWithHistory(row.id, row.text, text, now);
   broadcast(row.ulid, text);
-  broadcastListUpdated({ ...row, text, updated_at: now });
+  broadcastRow(
+    puesSse.broadcast,
+    row.user_id,
+    "lists",
+    "updated",
+    listRowToWire({ ...row, text, updated_at: now }),
+  );
 
   const { total, done } = countTodos(text);
   return json({
