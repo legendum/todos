@@ -1,3 +1,4 @@
+import { useEscape } from "pues/base/objects";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CopyIcon from "./CopyIcon";
@@ -13,16 +14,14 @@ export default function InstallDialog({ onClose }: Props) {
   const [installCopiedFlash, setInstallCopiedFlash] = useState(false);
   const copyFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
+  useEscape(true, onClose);
+
+  useEffect(
+    () => () => {
       if (copyFlashTimer.current) clearTimeout(copyFlashTimer.current);
-    };
-  }, [onClose]);
+    },
+    [],
+  );
 
   async function copyInstallCommand() {
     try {

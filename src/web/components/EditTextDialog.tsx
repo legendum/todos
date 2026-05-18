@@ -1,3 +1,4 @@
+import { useEscape } from "pues/base/objects";
 import { useEffect, useRef } from "react";
 
 export default function EditTextDialog({
@@ -17,13 +18,7 @@ export default function EditTextDialog({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(true, onClose);
 
   useEffect(() => {
     inputRef.current?.focus();

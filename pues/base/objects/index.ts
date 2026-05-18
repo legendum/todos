@@ -61,6 +61,7 @@ export {
   type UseDndPositionsResult,
   useDndPositions,
 } from "./useDndPositions";
+export { useEscape } from "./useEscape";
 export {
   applyFilter,
   type FilterPredicate,
