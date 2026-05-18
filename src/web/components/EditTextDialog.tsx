@@ -1,4 +1,4 @@
-import { useEscape } from "pues/base/objects";
+import { Dialog } from "pues/base/objects";
 import { useEffect, useRef } from "react";
 
 export default function EditTextDialog({
@@ -18,55 +18,39 @@ export default function EditTextDialog({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEscape(true, onClose);
-
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, []);
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
-          <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
-          <button type="button" className="dialog-close" onClick={onClose}>
-            &times;
-          </button>
-        </div>
-        <div className="dialog-body">
-          <input
-            ref={inputRef}
-            className="input"
-            value={text}
-            placeholder={placeholder}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSave();
-            }}
-            style={{ width: "100%" }}
-          />
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 12,
-              justifyContent: "flex-end",
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button type="button" className="btn" onClick={onSave}>
-              Save
-            </button>
-          </div>
-        </div>
+    <Dialog title={title} onClose={onClose}>
+      <input
+        ref={inputRef}
+        className="input"
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onSave();
+        }}
+        style={{ width: "100%" }}
+      />
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginTop: 12,
+          justifyContent: "flex-end",
+        }}
+      >
+        <button type="button" className="btn btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="btn" onClick={onSave}>
+          Save
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }

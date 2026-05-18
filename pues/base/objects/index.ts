@@ -9,6 +9,7 @@ export {
   type ResourceConfig,
   resolveColumns,
 } from "./config";
+export { Dialog, type DialogProps } from "./Dialog";
 export { FilterBar, type FilterBarProps } from "./FilterBar";
 export {
   type AuthConfig,

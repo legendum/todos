@@ -1,6 +1,5 @@
-import { useEscape } from "pues/base/objects";
+import { Dialog } from "pues/base/objects";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import CopyIcon from "./CopyIcon";
 
 const INSTALL_CMD = "curl -fsSL https://todos.in/install.sh | sh";
@@ -13,8 +12,6 @@ type Props = {
 export default function InstallDialog({ onClose }: Props) {
   const [installCopiedFlash, setInstallCopiedFlash] = useState(false);
   const copyFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEscape(true, onClose);
 
   useEffect(
     () => () => {
@@ -37,54 +34,45 @@ export default function InstallDialog({ onClose }: Props) {
     }
   }
 
-  const overlay = (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
-          <h2 style={{ margin: 0, fontSize: 18 }}>Install the todos CLI</h2>
-          <button className="dialog-close" onClick={onClose}>
-            &times;
-          </button>
+  return (
+    <Dialog title="Install the todos CLI" onClose={onClose}>
+      <section className="dialog-section">
+        <div className="dialog-section-head">
+          <h3>1. Install</h3>
+          {installCopiedFlash ? (
+            <span className="dialog-copy-hint" role="status">
+              Copied
+            </span>
+          ) : null}
         </div>
+        <button
+          type="button"
+          className={`dialog-code-install-wrap${installCopiedFlash ? " dialog-code--flash" : ""}`}
+          onClick={copyInstallCommand}
+          aria-label="Copy install command"
+        >
+          <span className="dialog-code-install-scroll">{INSTALL_CMD}</span>
+          <span className="dialog-code-install-icon" aria-hidden="true">
+            <CopyIcon />
+          </span>
+        </button>
+      </section>
 
-        <div className="dialog-body">
-          <section className="dialog-section">
-            <div className="dialog-section-head">
-              <h3>1. Install</h3>
-              {installCopiedFlash ? (
-                <span className="dialog-copy-hint" role="status">
-                  Copied
-                </span>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className={`dialog-code-install-wrap${installCopiedFlash ? " dialog-code--flash" : ""}`}
-              onClick={copyInstallCommand}
-              aria-label="Copy install command"
-            >
-              <span className="dialog-code-install-scroll">{INSTALL_CMD}</span>
-              <span className="dialog-code-install-icon" aria-hidden="true">
-                <CopyIcon />
-              </span>
-            </button>
-          </section>
+      <section className="dialog-section">
+        <h3>2. Add your webhook to a project</h3>
+        <p>
+          Each list has a webhook URL (tap the URL under the list name to copy
+          it). Add it to your project's <code>.env</code>:
+        </p>
+        <pre className="dialog-code">
+          TODOS_WEBHOOK=https://todos.in/w/01ABC123DEF456GHI789
+        </pre>
+      </section>
 
-          <section className="dialog-section">
-            <h3>2. Add your webhook to a project</h3>
-            <p>
-              Each list has a webhook URL (tap the URL under the list name to
-              copy it). Add it to your project's <code>.env</code>:
-            </p>
-            <pre className="dialog-code">
-              TODOS_WEBHOOK=https://todos.in/w/01ABC123DEF456GHI789
-            </pre>
-          </section>
-
-          <section className="dialog-section">
-            <h3>3. Use it</h3>
-            <pre className="dialog-code">
-              {`todos              # list todos
+      <section className="dialog-section">
+        <h3>3. Use it</h3>
+        <pre className="dialog-code">
+          {`todos              # list todos
 todos Buy milk     # add a todo
 todos done 1       # mark #1 as done
 todos undo 1       # mark #1 as not done
@@ -93,23 +81,17 @@ todos first 3      # move #3 to the top
 todos last 2       # move #2 to the bottom
 todos open         # open in the browser
 todos purge        # remove all done items`}
-            </pre>
-          </section>
+        </pre>
+      </section>
 
-          <section className="dialog-section">
-            <h3>4. Teach your AI agent</h3>
-            <p>
-              Install the skill file so Claude Code and Cursor know how to use
-              your todos:
-            </p>
-            <pre className="dialog-code">todos skill</pre>
-          </section>
-        </div>
-      </div>
-    </div>
+      <section className="dialog-section">
+        <h3>4. Teach your AI agent</h3>
+        <p>
+          Install the skill file so Claude Code and Cursor know how to use your
+          todos:
+        </p>
+        <pre className="dialog-code">todos skill</pre>
+      </section>
+    </Dialog>
   );
-
-  return typeof document !== "undefined"
-    ? createPortal(overlay, document.body)
-    : null;
 }
