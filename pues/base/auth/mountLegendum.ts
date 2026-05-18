@@ -20,14 +20,16 @@
  * the OAuth callback semantics.
  */
 
-import { createRequire } from "node:module";
 import { isByLegendum } from "../core/mode";
 import { setAuthCookieHeader } from "./cookie";
 import { requireAuthAsync } from "./middleware";
 import { getAuthConfig } from "./startup";
 import { getUserStorage } from "./storage";
 
-const require = createRequire(import.meta.url);
+// Bare `require()` rather than `createRequire(import.meta.url)`: Bun
+// resolves both at runtime, but only bare require() survives browser
+// bundling. The auth barrel re-exports this server-only module into
+// client code, so the bundler pulls it in too.
 const legendumSdk =
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require("./legendum.js") as typeof import("./legendum");

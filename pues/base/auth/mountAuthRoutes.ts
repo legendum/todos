@@ -10,7 +10,6 @@
  *   legendum_token) → set session cookie → redirect to `/`.
  */
 
-import { createRequire } from "node:module";
 import { isByLegendum } from "../core/mode";
 import {
   clearAuthCookieHeader,
@@ -20,7 +19,12 @@ import {
 import { getAuthConfig, getDomain } from "./startup";
 import { getUserStorage } from "./storage";
 
-const require = createRequire(import.meta.url);
+// Bare `require()` rather than `createRequire(import.meta.url)`: Bun
+// resolves both at runtime, but only bare require() survives browser
+// bundling. The auth part is server-only, yet consumers re-export the
+// whole barrel (`pues/base/auth`) into client code (`Legendum`,
+// `useUser`), so the bundler pulls this module in too. See Legendum.tsx
+// for the equivalent client-side note.
 const legendumSdk =
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require("./legendum.js") as typeof import("./legendum");

@@ -24,11 +24,15 @@
  * immediately via its own SDK subscription.
  */
 
-import { createRequire } from "node:module";
 import { useEffect, useRef, useState } from "react";
 import { usePuesUser } from "../core/Pues";
 
-const require = createRequire(import.meta.url);
+// Bun's bundler resolves bare `require()` statically when targeting
+// browsers. `createRequire(import.meta.url)` would also work server-side
+// but it depends on `node:module` which is absent in browser bundles —
+// at runtime the bundled call throws `createRequire is not a function`.
+// `<Legendum>` is browser-only, so we use the bare-require pattern that
+// the rest of the consumer codebase (e.g. todos' TopBar) already uses.
 const legendumSdk =
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require("./legendum.js") as typeof import("./legendum");
