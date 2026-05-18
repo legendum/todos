@@ -1,13 +1,11 @@
 import { join, resolve } from "node:path";
 import {
-  COOKIE_NAME,
   configureAuth,
-  ensureLocalUser,
   mountAuthRoutes,
   mountLegendum,
   mountUserSettings,
   resolveUser,
-  setAuthCookieHeader,
+  withSelfHostedSession,
 } from "pues/base/auth";
 import { isSelfHosted } from "pues/base/core";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
@@ -202,22 +200,6 @@ async function serveStatic(
   return new Response(file, { headers });
 }
 
-/**
- * Self-hosted bootstrap: if no `pues_session` cookie is present, ensure the
- * local user exists and return a Set-Cookie header for it. Hosted mode
- * returns null — auth there flows through `/pues/auth/*` instead.
- *
- * Returned by `serveIndex` so the SPA shell lands with a cookie attached;
- * subsequent same-origin fetches (including `/pues/me`) then authenticate.
- */
-async function selfHostedBootstrapCookie(req: Request): Promise<string | null> {
-  if (!isSelfHosted()) return null;
-  const cookie = req.headers.get("Cookie") ?? "";
-  if (new RegExp(`(?:^|; )${COOKIE_NAME}=`).test(cookie)) return null;
-  const userId = await ensureLocalUser();
-  return setAuthCookieHeader(userId);
-}
-
 async function serveIndex(req: Request): Promise<Response> {
   const bundle = await getBundleFilename();
   const scriptTag = bundle
@@ -243,10 +225,10 @@ async function serveIndex(req: Request): Promise<Response> {
     ${scriptTag}
   </body>
 </html>`;
-  const headers: Record<string, string> = { "Content-Type": "text/html" };
-  const setCookie = await selfHostedBootstrapCookie(req);
-  if (setCookie) headers["Set-Cookie"] = setCookie;
-  return new Response(html, { headers });
+  return withSelfHostedSession(
+    req,
+    new Response(html, { headers: { "Content-Type": "text/html" } }),
+  );
 }
 
 export default {
