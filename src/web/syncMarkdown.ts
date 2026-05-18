@@ -1,5 +1,7 @@
+import { puesAuthedFetch } from "pues/base/core";
+import type { Row } from "pues/base/objects";
 import { shouldFetchMarkdownBody } from "../lib/markdownSyncPolicy.js";
-import { countTodos } from "../lib/todos";
+import { wireRowToListEntry } from "./listEntry";
 import {
   getMarkdown,
   getPendingMarkdowns,
@@ -8,28 +10,10 @@ import {
   saveMarkdown,
 } from "./offlineDb";
 
-type PuesListWire = {
-  id: string;
-  label: string;
-  position: number;
-  updated_at?: number;
-  slug?: string;
-  text?: string;
-};
-
-function wireToListEntry(w: PuesListWire): ListEntry {
-  const text = typeof w.text === "string" ? w.text : "";
-  const { total, done } = countTodos(text);
-  return {
-    name: w.label,
-    slug: typeof w.slug === "string" ? w.slug : "",
-    ulid: w.id,
-    position: w.position,
-    total,
-    done,
-    updated_at: typeof w.updated_at === "number" ? w.updated_at : 0,
-  };
-}
+// Module-scope 401-aware fetch. Same wrapper `<Pues>` uses internally;
+// reaching for it here so background reconcile after a reconnect
+// participates in session-expiry detection.
+const authedFetch = puesAuthedFetch();
 
 /** Push all pending markdown PUTs, then pull server versions that are newer than our cache. */
 export async function syncMarkdownAfterReconnect(): Promise<void> {
@@ -44,7 +28,7 @@ async function flushPendingMarkdownPuts(): Promise<void> {
   for (const row of await getPendingMarkdowns()) {
     const { slug, text } = row;
     try {
-      const res = await fetch(`/${slug}`, {
+      const res = await authedFetch(`/${slug}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "text/markdown" },
@@ -67,13 +51,13 @@ async function flushPendingMarkdownPuts(): Promise<void> {
 async function pullNewerMarkdownFromServer(): Promise<void> {
   let list: ListEntry[];
   try {
-    const listRes = await fetch("/api/lists", {
+    const listRes = await authedFetch("/api/lists", {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!listRes.ok) return;
-    const data = (await listRes.json()) as PuesListWire[];
-    list = data.map(wireToListEntry);
+    const data = (await listRes.json()) as Row[];
+    list = data.map(wireRowToListEntry);
     await saveLists(list);
   } catch {
     return;
@@ -89,7 +73,9 @@ async function pullNewerMarkdownFromServer(): Promise<void> {
     )
       continue;
     try {
-      const res = await fetch(`/${entry.slug}.md`, { credentials: "include" });
+      const res = await authedFetch(`/${entry.slug}.md`, {
+        credentials: "include",
+      });
       if (!res.ok) continue;
       const text = await res.text();
       const h = res.headers.get("X-Updated-At");

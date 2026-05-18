@@ -1,5 +1,5 @@
 import { Legendum, useUser } from "pues/base/auth";
-import { Pues } from "pues/base/core";
+import { Pues, puesAuthedFetch } from "pues/base/core";
 import { useResource } from "pues/base/objects";
 import { useEffect, useRef, useState } from "react";
 import Lists from "./components/Lists";
@@ -13,6 +13,11 @@ import {
   type ListEntry,
   saveMarkdown,
 } from "./offlineDb";
+
+// Module-scope 401-aware fetch for the few helpers (`resolveSlug` below)
+// that run outside a React component context. Inside components, hooks
+// reach for `usePuesFetch()` instead.
+const authedFetch = puesAuthedFetch();
 
 /** Extract slug from the current URL path. Returns null if at root. */
 function getSlugFromPath(): string | null {
@@ -33,7 +38,7 @@ function getSlugFromPath(): string | null {
  * the offline list cache. */
 async function resolveSlug(slug: string): Promise<ListEntry | null> {
   try {
-    const r = await fetch(`/${slug}.json`, {
+    const r = await authedFetch(`/${slug}.json`, {
       credentials: "include",
       headers: { Accept: "application/json" },
     });

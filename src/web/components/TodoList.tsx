@@ -13,6 +13,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { usePuesFetch } from "pues/base/core";
 import {
   ObjectDetail,
   RenameTitle,
@@ -66,6 +67,7 @@ export default function TodoList({
   const initialScrollSlugRef = useRef<string | null>(null);
   const pushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const online = useOnlineStatus();
+  const authedFetch = usePuesFetch();
 
   const onDocHistoryTextLoaded = useCallback(
     async (text: string, updatedAt: number) => {
@@ -148,7 +150,9 @@ export default function TodoList({
 
     void (async () => {
       try {
-        const res = await fetch(`/${slug}.md`, { credentials: "include" });
+        const res = await authedFetch(`/${slug}.md`, {
+          credentials: "include",
+        });
         if (!res.ok) throw new Error(String(res.status));
         const text = await res.text();
         const h = res.headers.get("X-Updated-At");
@@ -166,7 +170,7 @@ export default function TodoList({
     return () => {
       cancelled = true;
     };
-  }, [list.slug]);
+  }, [list.slug, authedFetch]);
 
   // Live updates when online
   useEffect(() => {
@@ -219,7 +223,7 @@ export default function TodoList({
             pending: true,
           });
           try {
-            const res = await fetch(`/${list.slug}`, {
+            const res = await authedFetch(`/${list.slug}`, {
               method: "PUT",
               credentials: "include",
               headers: { "Content-Type": "text/markdown" },
@@ -240,7 +244,7 @@ export default function TodoList({
         })();
       }, 300);
     },
-    [list.slug],
+    [list.slug, authedFetch],
   );
 
   const updateLines = useCallback(

@@ -1,3 +1,4 @@
+import { usePuesFetch } from "pues/base/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** How long the error banner stays visible before auto-clearing. */
@@ -26,6 +27,7 @@ export function useDocHistory({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authedFetch = usePuesFetch();
 
   useEffect(() => {
     return () => {
@@ -52,7 +54,7 @@ export function useDocHistory({
       setBusy(true);
       setError(null);
       try {
-        const res = await fetch(`/${slug}/${kind}`, {
+        const res = await authedFetch(`/${slug}/${kind}`, {
           method: "POST",
           credentials: "include",
         });
@@ -81,7 +83,7 @@ export function useDocHistory({
         setBusy(false);
       }
     },
-    [busy, slug, online, onTextLoaded, setTransientError],
+    [busy, slug, online, onTextLoaded, setTransientError, authedFetch],
   );
 
   return { busy, error, run };

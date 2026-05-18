@@ -25,7 +25,7 @@ import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
 import { useEffect } from "react";
 
-import { countTodos } from "../../lib/todos.js";
+import { wireRowToListEntry } from "../listEntry";
 import type { ListEntry } from "../offlineDb";
 import DragHandle from "./DragHandle";
 
@@ -36,24 +36,6 @@ type Props = {
   filterInputRef: RefObject<HTMLInputElement | null>;
   visible: boolean;
 };
-
-/**
- * Adapt a pues row (canonical wire shape + slug/text passthroughs) into the
- * `ListEntry` shape that the rest of the todos web layer still consumes.
- */
-function rowToListEntry(row: Row): ListEntry {
-  const text = typeof row.text === "string" ? row.text : "";
-  const { total, done } = countTodos(text);
-  return {
-    name: row.label,
-    slug: typeof row.slug === "string" ? row.slug : "",
-    ulid: String(row.id),
-    position: row.position,
-    total,
-    done,
-    updated_at: typeof row.updated_at === "number" ? row.updated_at : 0,
-  };
-}
 
 /** Module-level so its identity is stable across renders (avoids needless
  * useFilter recomputation). Matches the canonical label + the `slug` and
@@ -111,7 +93,7 @@ export default function Lists({
             <StaticListRow
               key={String(row.id)}
               row={row}
-              onSelect={() => onSelect(rowToListEntry(row))}
+              onSelect={() => onSelect(wireRowToListEntry(row))}
               onDelete={() => void del(row.id)}
             />
           ))}
@@ -130,7 +112,7 @@ export default function Lists({
                 <SortableListRow
                   key={String(row.id)}
                   row={row}
-                  onSelect={() => onSelect(rowToListEntry(row))}
+                  onSelect={() => onSelect(wireRowToListEntry(row))}
                   onDelete={() => void del(row.id)}
                 />
               ))}
@@ -156,7 +138,7 @@ export default function Lists({
         placeholder="List name"
         onCreated={(row) => {
           window.dispatchEvent(new Event("todos-credits-refresh"));
-          onSelect(rowToListEntry(row));
+          onSelect(wireRowToListEntry(row));
         }}
       />
 
