@@ -55,10 +55,7 @@ export async function buildPwaManifest({
   const path = join(root, "public/manifest.json");
   await Bun.write(path, body);
 
-  const revision = createHash("sha256")
-    .update(body)
-    .digest("hex")
-    .slice(0, 20);
+  const revision = createHash("sha256").update(body).digest("hex").slice(0, 20);
 
   return { path, revision };
 }

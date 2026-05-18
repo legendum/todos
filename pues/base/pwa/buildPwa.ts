@@ -23,8 +23,8 @@ import { join } from "node:path";
 import { buildPwaManifest } from "./buildPwaManifest";
 import {
   type AdditionalAsset,
-  buildServiceWorker,
   type BuildServiceWorkerResult,
+  buildServiceWorker,
 } from "./buildServiceWorker";
 import { readPwaConfig } from "./config";
 

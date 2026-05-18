@@ -8,6 +8,6 @@ export {
   type ReconnectCallback,
 } from "./onReconnect";
 export {
-  registerServiceWorker,
   type RegisterServiceWorkerOptions,
+  registerServiceWorker,
 } from "./registerServiceWorker";

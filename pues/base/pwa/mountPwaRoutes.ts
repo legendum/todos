@@ -65,14 +65,8 @@ export async function mountPwaRoutes({
         "Cache-Control": "no-cache",
       },
     ),
-    [cfg.icon192]: serve(
-      join(root, "public", cfg.icon192),
-      "image/png",
-    ),
-    [cfg.icon512]: serve(
-      join(root, "public", cfg.icon512),
-      "image/png",
-    ),
+    [cfg.icon192]: serve(join(root, "public", cfg.icon192), "image/png"),
+    [cfg.icon512]: serve(join(root, "public", cfg.icon512), "image/png"),
   };
 
   async function fetchHandler(req: Request): Promise<Response | null> {

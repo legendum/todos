@@ -79,12 +79,7 @@ export async function buildServiceWorker({
     swDest: join(distDir, "sw.js"),
     globDirectory: distDir,
     globPatterns: ["**/*.js"],
-    globIgnores: [
-      "sw.js",
-      "sw.js.map",
-      "workbox-*.js",
-      "workbox-*.js.map",
-    ],
+    globIgnores: ["sw.js", "sw.js.map", "workbox-*.js", "workbox-*.js.map"],
     cacheId,
     cleanupOutdatedCaches: true,
     skipWaiting: true,

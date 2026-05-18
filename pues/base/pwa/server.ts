@@ -5,19 +5,23 @@
 // `pues.yaml` from disk. The client-safe symbols (`registerServiceWorker`,
 // `onReconnect`) stay in the default barrel. See SPEC §9.6.
 
-export { buildPwa, type BuildPwaArgs, type BuildPwaResult } from "./buildPwa";
+export { type BuildPwaArgs, type BuildPwaResult, buildPwa } from "./buildPwa";
 export {
-  buildPwaManifest,
   type BuildPwaManifestResult,
+  buildPwaManifest,
 } from "./buildPwaManifest";
 export {
   type AdditionalAsset,
-  buildServiceWorker,
   type BuildServiceWorkerArgs,
   type BuildServiceWorkerResult,
+  buildServiceWorker,
 } from "./buildServiceWorker";
 export {
-  mountPwaRoutes,
+  type PwaConfig,
+  type ResolvedPwaConfig,
+  readPwaConfig,
+} from "./config";
+export {
   type MountPwaRoutesResult,
+  mountPwaRoutes,
 } from "./mountPwaRoutes";
-export { type PwaConfig, type ResolvedPwaConfig, readPwaConfig } from "./config";
