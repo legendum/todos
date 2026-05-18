@@ -6,10 +6,18 @@ parts:
   - auth
   - objects
   - sse
+  - pwa
 
 app:
   name: todos
   db: data/todos.db
+
+# `base/pwa/` reads this section. Pues bakes start_url + display +
+# icon type/purpose; everything else is per-consumer.
+pwa:
+  name: Todos
+  background_color: "#0f172a"
+  theme_color: "#0f172a"
 
 # Role-mapping for base/objects/ — see SPEC §5.2.
 # todos' `lists` table matches every default in §5.3 so no `columns:` block

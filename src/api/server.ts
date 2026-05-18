@@ -9,6 +9,7 @@ import {
 } from "pues/base/auth/server";
 import { isSelfHosted } from "pues/base/core";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
+import { mountPwaRoutes } from "pues/base/pwa/server";
 import { chargeListCreate, closeTabs } from "../lib/billing.js";
 import { PORT } from "../lib/constants.js";
 import { getDb } from "../lib/db.js";
@@ -38,6 +39,10 @@ if (!listsResource) {
     "config/pues.yaml: `resources.lists` is required for the /api/lists route.",
   );
 }
+
+// --- pues PWA routes (`base/pwa/`, SPEC §3) ---
+// /manifest.json + /dist/sw.js + icon192/icon512 + the workbox runtime wildcard.
+const pwa = await mountPwaRoutes({ root });
 
 function rejectJson(status: number, code: string, message: string): Response {
   return new Response(JSON.stringify({ error: code, message }), {
@@ -274,23 +279,17 @@ export default {
         addWebhookCors(webhookHandlers.sseStream(req.params.ulid, req.signal)),
     },
 
+    // --- pues PWA: /manifest.json + /dist/sw.js + icon192/icon512 ---
+    ...pwa.routes,
+
     // --- Static assets (same-origin, no CORS) ---
     "/main.css": () => serveStatic(join(root, "src/web/main.css"), "text/css"),
     "/pues/theme.css": () =>
       serveStatic(join(root, "pues/base/theme/theme.css"), "text/css"),
     "/pues/objects.css": () =>
       serveStatic(join(root, "pues/base/objects/objects.css"), "text/css"),
-    "/manifest.json": () =>
-      serveStatic(
-        join(root, "src/web/manifest.json"),
-        "application/manifest+json",
-      ),
     "/todos.png": () =>
       serveStatic(join(root, "public/todos.png"), "image/png"),
-    "/todos-192.png": () =>
-      serveStatic(join(root, "public/todos-192.png"), "image/png"),
-    "/todos-512.png": () =>
-      serveStatic(join(root, "public/todos-512.png"), "image/png"),
     "/undo-arrow.svg": () =>
       serveStatic(
         join(root, "public/undo-arrow.svg"),
@@ -302,13 +301,6 @@ export default {
         join(root, "public/redo-arrow.svg"),
         "image/svg+xml",
         "public, max-age=86400",
-      ),
-    "/dist/sw.js": () =>
-      serveStatic(
-        join(root, "public/dist/sw.js"),
-        "application/javascript",
-        "no-cache",
-        { "Service-Worker-Allowed": "/" },
       ),
   },
   async fetch(req: Request) {
@@ -322,21 +314,10 @@ export default {
       return new Response(null, { status: 204, headers: webhookCorsHeaders });
     }
 
-    // --- Workbox + hashed dist bundles (pattern-matched, kept in fetch) ---
-    if (/^\/dist\/workbox-[a-f0-9]+\.js(\.map)?$/.test(path)) {
-      const file = Bun.file(join(root, "public", path.slice(1)));
-      if (await file.exists()) {
-        const isMap = path.endsWith(".map");
-        return new Response(file, {
-          headers: {
-            "Content-Type": isMap
-              ? "application/json"
-              : "application/javascript",
-            "Cache-Control": isMap ? "no-cache" : "public, max-age=86400",
-          },
-        });
-      }
-    }
+    // pues PWA: workbox-* runtime chunks (hash-named, so wildcard not literal).
+    const pwaHit = await pwa.fetch(req);
+    if (pwaHit) return pwaHit;
+
     if (path.startsWith("/dist/")) {
       const file = Bun.file(join(root, "public", path));
       if (await file.exists()) {

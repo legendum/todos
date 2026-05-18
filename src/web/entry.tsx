@@ -1,32 +1,11 @@
+import { onReconnect, registerServiceWorker } from "pues/base/pwa";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { syncMarkdownAfterReconnect } from "./syncMarkdown";
 import "pues/base/theme/install";
 
-window.addEventListener("online", () => {
-  void syncMarkdownAfterReconnect();
-});
-
-window.addEventListener("load", () => {
-  if (navigator.onLine) void syncMarkdownAfterReconnect();
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker
-      .register("/dist/sw.js", {
-        updateViaCache: "none",
-        scope: "/",
-      })
-      .catch(() => {});
-  }
-});
+onReconnect(syncMarkdownAfterReconnect);
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (root) createRoot(root).render(<App />);
-
-if ("serviceWorker" in navigator) {
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
-    refreshing = true;
-    window.location.reload();
-  });
-}
