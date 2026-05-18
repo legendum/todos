@@ -23,6 +23,11 @@ export {
 export { mountAuthRoutes } from "./mountAuthRoutes";
 export { mountLegendum } from "./mountLegendum";
 export { mountUserSettings } from "./mountUserSettings";
+// Client-side 401-aware fetch wrapper. Pair with `useUser` which
+// auto-subscribes to its 401 events to flip the user back to anonymous
+// on session expiry. The consumer wires the wrapper once at the root:
+//   <Pues fetch={puesAuthedFetch()}>...</Pues>
+export { puesAuthedFetch } from "./puesAuthedFetch";
 // Default canonical-schema UserStorage adapter (built into
 // configureAuth when `getDb` is supplied; also exported for consumers
 // that want to wrap or compose it).

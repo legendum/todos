@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { type PuesUser, usePuesFetch } from "../core/Pues";
 import { reconcileTheme } from "../theme/state";
+import { onPuesUnauthorized } from "./puesAuthedFetch";
 
 export type UseUserResult = {
   user: PuesUser | null;
@@ -61,6 +62,12 @@ export function useUser(opts?: { fetch?: typeof fetch }): UseUserResult {
   useEffect(() => {
     refetch().finally(() => setLoading(false));
   }, [refetch]);
+
+  // Auto-subscribe to 401 events from puesAuthedFetch — when the
+  // server starts rejecting authenticated requests mid-session, flip
+  // the user back to anonymous so the consumer renders the login UI.
+  // No-op if the consumer is not using puesAuthedFetch.
+  useEffect(() => onPuesUnauthorized(() => setUser(null)), []);
 
   return { user, loading, setUser, refetch };
 }

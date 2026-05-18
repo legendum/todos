@@ -1,11 +1,10 @@
-import { Legendum, useUser } from "pues/base/auth";
+import { Legendum, puesAuthedFetch, useUser } from "pues/base/auth";
 import { Pues } from "pues/base/core";
 import { useResource } from "pues/base/objects";
 import { useEffect, useRef, useState } from "react";
 import Lists from "./components/Lists";
 import TodoList from "./components/TodoList";
 import TopBar from "./components/TopBar";
-import { setUnauthorizedHandler } from "./fetchWithAuth";
 import { listFromTodoJson, type TodoListJson } from "./listFromJson";
 import {
   deleteMarkdown,
@@ -30,6 +29,13 @@ function getSlugFromPath(): string | null {
   return slug || null;
 }
 
+/** Module-scope authedFetch — wrap the global fetch once at module load so
+ * the function identity is stable across re-renders. Passed both to
+ * `useUser` (so its `/pues/me` request is authed-aware) and to `<Pues fetch>`
+ * (so every downstream hook inherits it). On 401, useUser auto-subscribes
+ * and flips user to null — no manual setUnauthorizedHandler wiring. */
+const authedFetch = puesAuthedFetch();
+
 /** Resolve a slug to a ListEntry, preferring the network and falling back to
  * the offline list cache. */
 async function resolveSlug(slug: string): Promise<ListEntry | null> {
@@ -49,7 +55,7 @@ async function resolveSlug(slug: string): Promise<ListEntry | null> {
 }
 
 export default function App() {
-  const { user, loading, setUser } = useUser();
+  const { user, loading } = useUser({ fetch: authedFetch });
   const [selectedList, setSelectedList] = useState<ListEntry | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -61,10 +67,6 @@ export default function App() {
   // without any manual prop-callback dance. Gated on `user` so the
   // initial fetch doesn't 401 before login completes.
   const resource = useResource("lists", { enabled: !!user });
-
-  useEffect(() => {
-    setUnauthorizedHandler(() => setUser(null));
-  }, [setUser]);
 
   // On initial load, if the URL has a slug, fetch that list (or use cached list)
   useEffect(() => {
@@ -135,53 +137,51 @@ export default function App() {
     window.history.pushState(null, "", "/");
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
-        Loading...
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Pues user={null}>
+  // Single Pues wrap at the top of every render — fetch + tri-state user
+  // shared across loading / login / authed branches. user={undefined}
+  // (loading) renders <Legendum> as null; user={null} renders its login
+  // CTA; user={PuesUser} renders the authed widgets.
+  return (
+    <Pues fetch={authedFetch} user={loading ? undefined : user}>
+      {loading ? (
+        <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
+          Loading...
+        </div>
+      ) : !user ? (
         <div className="login-screen">
           <img src="/todos.png" alt="Todos" className="login-logo" />
           <h1>Todos</h1>
           <p>Todo lists for AI projects, and everything else.</p>
           <Legendum className="btn" />
         </div>
-      </Pues>
-    );
-  }
-
-  return (
-    <Pues user={user}>
-      <TopBar
-        isSelfHosted={isSelfHosted}
-        filterQuery={filterQuery}
-        setFilterQuery={setFilterQuery}
-        filterInputRef={filterInputRef}
-      />
-      <div style={{ display: selectedList ? "none" : undefined }}>
-        <Lists
-          resource={resource}
-          onSelect={selectList}
-          filterQuery={filterQuery}
-          filterInputRef={filterInputRef}
-          visible={selectedList === null}
-        />
-      </div>
-      {selectedList ? (
-        <TodoList
-          key={selectedList.ulid}
-          resource={resource}
-          list={selectedList}
-          filterQuery={filterQuery}
-          onBack={goBack}
-        />
-      ) : null}
+      ) : (
+        <>
+          <TopBar
+            isSelfHosted={isSelfHosted}
+            filterQuery={filterQuery}
+            setFilterQuery={setFilterQuery}
+            filterInputRef={filterInputRef}
+          />
+          <div style={{ display: selectedList ? "none" : undefined }}>
+            <Lists
+              resource={resource}
+              onSelect={selectList}
+              filterQuery={filterQuery}
+              filterInputRef={filterInputRef}
+              visible={selectedList === null}
+            />
+          </div>
+          {selectedList ? (
+            <TodoList
+              key={selectedList.ulid}
+              resource={resource}
+              list={selectedList}
+              filterQuery={filterQuery}
+              onBack={goBack}
+            />
+          ) : null}
+        </>
+      )}
     </Pues>
   );
 }
