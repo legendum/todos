@@ -1,8 +1,8 @@
+import { Legendum, useUser } from "pues/base/auth";
+import { Pues } from "pues/base/core";
 import { useResource } from "pues/base/objects";
-import { reconcileTheme } from "pues/base/theme";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Lists from "./components/Lists";
-import Login from "./components/Login";
 import TodoList from "./components/TodoList";
 import TopBar from "./components/TopBar";
 import { setUnauthorizedHandler } from "./fetchWithAuth";
@@ -14,12 +14,6 @@ import {
   type ListEntry,
   saveMarkdown,
 } from "./offlineDb";
-
-type User = {
-  legendum_linked: boolean;
-  hosted: boolean;
-  meta?: { theme?: unknown };
-};
 
 /** Extract slug from the current URL path. Returns null if at root. */
 function getSlugFromPath(): string | null {
@@ -55,8 +49,7 @@ async function resolveSlug(slug: string): Promise<ListEntry | null> {
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading, setUser } = useUser();
   const [selectedList, setSelectedList] = useState<ListEntry | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -69,28 +62,9 @@ export default function App() {
   // initial fetch doesn't 401 before login completes.
   const resource = useResource("lists", { enabled: !!user });
 
-  const fetchUser = useCallback(async () => {
-    try {
-      const res = await fetch("/t/settings/me", { credentials: "include" });
-      if (!res.ok) {
-        setUser(null);
-        return;
-      }
-      const data = (await res.json()) as User;
-      reconcileTheme(data.meta?.theme);
-      setUser(data);
-    } catch {
-      setUser(null);
-    }
-  }, []);
-
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null));
-  }, []);
-
-  useEffect(() => {
-    fetchUser().finally(() => setLoading(false));
-  }, [fetchUser]);
+  }, [setUser]);
 
   // On initial load, if the URL has a slug, fetch that list (or use cached list)
   useEffect(() => {
@@ -170,11 +144,20 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login />;
+    return (
+      <Pues user={null}>
+        <div className="login-screen">
+          <img src="/todos.png" alt="Todos" className="login-logo" />
+          <h1>Todos</h1>
+          <p>Todo lists for AI projects, and everything else.</p>
+          <Legendum className="btn" />
+        </div>
+      </Pues>
+    );
   }
 
   return (
-    <>
+    <Pues user={user}>
       <TopBar
         isSelfHosted={isSelfHosted}
         filterQuery={filterQuery}
@@ -199,6 +182,6 @@ export default function App() {
           onBack={goBack}
         />
       ) : null}
-    </>
+    </Pues>
   );
 }

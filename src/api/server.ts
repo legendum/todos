@@ -1,34 +1,37 @@
 import { join, resolve } from "node:path";
+import {
+  COOKIE_NAME,
+  configureAuth,
+  ensureLocalUser,
+  mountAuthRoutes,
+  mountLegendum,
+  mountUserSettings,
+  resolveUser,
+  setAuthCookieHeader,
+} from "pues/base/auth";
+import { isSelfHosted } from "pues/base/core";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
 import { sseRoute } from "pues/base/sse";
-import { setAuthCookieHeader } from "../lib/auth.js";
 import { chargeListCreate, closeTabs } from "../lib/billing.js";
+import { PORT } from "../lib/constants.js";
 import { getDb } from "../lib/db.js";
 import { countListsForUser, MAX_LISTS_PER_USER } from "../lib/listHistory.js";
-import { isSelfHosted, LOCAL_USER_EMAIL } from "../lib/mode.js";
 import { seedDefaultListsForNewUser } from "../lib/seed-default-lists.js";
 import { toSlug, validateListName } from "../lib/todos.js";
-import {
-  getAuthUserIdWithBearer,
-  requireAuthAsync,
-} from "./auth-middleware.js";
+import * as listHandlers from "./handlers/lists.js";
+import * as webhookHandlers from "./handlers/webhook.js";
 import { json } from "./json.js";
 import { setPuesBroadcast } from "./pues-runtime.js";
 
 const root = resolve(import.meta.dir, "../..");
 
-import * as authHandlers from "./handlers/auth.js";
-import * as listHandlers from "./handlers/lists.js";
-import * as settingsHandlers from "./handlers/settings.js";
-import * as webhookHandlers from "./handlers/webhook.js";
-
-// @ts-expect-error — pure JS SDK
-const legendumSdk = require("../lib/legendum.js");
-
-// Initialize DB
+// Initialize DB before anything else touches it.
 getDb();
 
-import { PORT } from "../lib/constants.js";
+// --- pues auth wiring (SPEC §3.X) ---
+// `getDb` is the canonical bun:sqlite getter; pues uses it to build the
+// default `puesUserStorage` against the standard users-table schema.
+configureAuth({ getDb, onNewUser: seedDefaultListsForNewUser });
 
 // --- pues role-mapped resources (SPEC §5) + per-user SSE (SPEC §7) ---
 const puesConfig = await loadPuesConfig();
@@ -39,18 +42,7 @@ if (!listsResource) {
   );
 }
 
-const resolvePuesUser = async (req: Request): Promise<number | null> => {
-  if (isSelfHosted()) {
-    const db = getDb();
-    const row = db.query("SELECT id FROM users LIMIT 1").get() as {
-      id: number;
-    } | null;
-    return row?.id ?? null;
-  }
-  return await getAuthUserIdWithBearer(req);
-};
-
-const puesSse = sseRoute({ resolveUser: resolvePuesUser });
+const puesSse = sseRoute({ resolveUser });
 setPuesBroadcast(puesSse.broadcast);
 
 function rejectJson(status: number, code: string, message: string): Response {
@@ -64,7 +56,7 @@ const puesRoutes = mountResource({
   db: getDb(),
   name: "lists",
   config: listsResource,
-  resolveUser: resolvePuesUser,
+  resolveUser,
   broadcast: puesSse.broadcast,
   beforeInsert: async ({ body, userId }) => {
     const label = typeof body.label === "string" ? body.label : "";
@@ -122,60 +114,6 @@ const puesRoutes = mountResource({
     return { ...body, label: trimmed, slug: newSlug };
   },
 });
-
-// Legendum middleware for link/unlink
-const legendumMiddleware = legendumSdk.isConfigured()
-  ? legendumSdk.middleware({
-      prefix: "/t/legendum",
-      getToken: async (_req: Request, userId: string) => {
-        const db = getDb();
-        const row = db
-          .query("SELECT legendum_token FROM users WHERE id = ?")
-          .get(userId) as { legendum_token: string | null } | undefined;
-        return row?.legendum_token || null;
-      },
-      setToken: async (_req: Request, accountToken: string, userId: string) => {
-        const db = getDb();
-        db.run(
-          "UPDATE users SET legendum_token = ? WHERE id = ?",
-          accountToken,
-          userId,
-        );
-      },
-      clearToken: async (_req: Request, userId: string) => {
-        const db = getDb();
-        db.run("UPDATE users SET legendum_token = NULL WHERE id = ?", userId);
-      },
-      onLinkKey: async (
-        _req: Request,
-        accountToken: string,
-        email: string | null,
-      ) => {
-        if (!email) return;
-        const db = getDb();
-        let row = db.query("SELECT id FROM users WHERE email = ?").get(email) as
-          | { id: number }
-          | undefined;
-        if (!row) {
-          db.run(
-            "INSERT INTO users (email, legendum_token) VALUES (?, ?)",
-            email,
-            accountToken,
-          );
-          row = db.query("SELECT id FROM users WHERE email = ?").get(email) as {
-            id: number;
-          };
-          seedDefaultListsForNewUser(row.id);
-        } else {
-          db.run(
-            "UPDATE users SET legendum_token = ? WHERE id = ?",
-            accountToken,
-            row.id,
-          );
-        }
-      },
-    })
-  : null;
 
 // CORS is needed only on the public webhook surface (`/w/:ulid` and friends),
 // which third-party agents and scripts hit cross-origin. The PWA frontend is
@@ -268,7 +206,23 @@ async function serveStatic(
   return new Response(file, { headers });
 }
 
-async function serveIndex(): Promise<Response> {
+/**
+ * Self-hosted bootstrap: if no `pues_session` cookie is present, ensure the
+ * local user exists and return a Set-Cookie header for it. Hosted mode
+ * returns null — auth there flows through `/pues/auth/*` instead.
+ *
+ * Returned by `serveIndex` so the SPA shell lands with a cookie attached;
+ * subsequent same-origin fetches (including `/pues/me`) then authenticate.
+ */
+async function selfHostedBootstrapCookie(req: Request): Promise<string | null> {
+  if (!isSelfHosted()) return null;
+  const cookie = req.headers.get("Cookie") ?? "";
+  if (new RegExp(`(?:^|; )${COOKIE_NAME}=`).test(cookie)) return null;
+  const userId = await ensureLocalUser();
+  return setAuthCookieHeader(userId);
+}
+
+async function serveIndex(req: Request): Promise<Response> {
   const bundle = await getBundleFilename();
   const scriptTag = bundle
     ? `<script type="module" src="/dist/${bundle}"></script>`
@@ -293,7 +247,10 @@ async function serveIndex(): Promise<Response> {
     ${scriptTag}
   </body>
 </html>`;
-  return new Response(html, { headers: { "Content-Type": "text/html" } });
+  const headers: Record<string, string> = { "Content-Type": "text/html" };
+  const setCookie = await selfHostedBootstrapCookie(req);
+  if (setCookie) headers["Set-Cookie"] = setCookie;
+  return new Response(html, { headers });
 }
 
 export default {
@@ -304,20 +261,10 @@ export default {
     ...puesRoutes,
     ...puesSse.routes,
 
-    // --- Auth (only mounted in hosted mode; top-level browser nav, no CORS) ---
-    ...(legendumSdk.isConfigured()
-      ? {
-          "/auth/login": {
-            GET: (req: Request) => authHandlers.getLogin(req),
-          },
-          "/auth/callback": {
-            GET: (req: Request) => authHandlers.getCallback(req),
-          },
-          "/auth/logout": {
-            POST: () => authHandlers.postLogout(),
-          },
-        }
-      : {}),
+    // --- pues auth + Legendum SDK + user settings (SPEC §3.X) ---
+    ...mountAuthRoutes(),
+    ...mountLegendum(),
+    ...mountUserSettings(),
 
     // --- Public webhook (cross-origin: CORS applied) ---
     "/w/:ulid": {
@@ -425,87 +372,29 @@ export default {
     }
 
     // Browser GETs to non-API paths get the SPA shell. Runs before user
-    // resolution so unauthenticated visitors land on the login UI in hosted mode.
+    // resolution so unauthenticated visitors land on the login UI in hosted
+    // mode, and so the self-hosted cookie-mint side-effect happens on page
+    // navigation (covered by `serveIndex`).
     const accept = req.headers.get("Accept") ?? "";
     const isPageNavigation =
       method === "GET" &&
       !accept.includes("application/json") &&
-      !path.startsWith("/t/") &&
+      !path.startsWith("/pues/") &&
       !path.startsWith("/w/") &&
       !path.startsWith("/dist/") &&
       !path.match(/\.(md|json)$/);
 
     if (isPageNavigation) {
-      return await serveIndex();
+      return await serveIndex(req);
     }
 
-    // POST link-key: Bearer lak_ → account_token + optional session cookie.
-    // Hosted-mode-only and must run before requireAuth.
-    if (
-      legendumMiddleware &&
-      path === "/t/legendum/link-key" &&
-      method === "POST"
-    ) {
-      const legendumRes = await legendumMiddleware(req);
-      if (legendumRes?.status === 200) {
-        const data = (await legendumRes.json()) as {
-          account_token: string;
-          email?: string;
-        };
-        const email = data.email;
-        if (email) {
-          const db = getDb();
-          const row = db
-            .query("SELECT id FROM users WHERE email = ?")
-            .get(email) as { id: number } | undefined;
-          if (row) {
-            const headers = new Headers({
-              "Content-Type": "application/json",
-            });
-            headers.append("Set-Cookie", setAuthCookieHeader(row.id));
-            return new Response(JSON.stringify(data), { status: 200, headers });
-          }
-        }
-        return new Response(JSON.stringify(data), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return legendumRes!;
-    }
-
-    // Resolve the user. Self-hosted: ensure a single local user exists.
-    // Hosted: require a session cookie or Bearer account_token.
-    let userId: number;
-    if (isSelfHosted()) {
-      const db = getDb();
-      let user = db.query("SELECT id FROM users LIMIT 1").get() as {
-        id: number;
-      } | null;
-      if (!user) {
-        db.run("INSERT INTO users (email) VALUES (?)", LOCAL_USER_EMAIL);
-        user = db.query("SELECT id FROM users LIMIT 1").get() as { id: number };
-        seedDefaultListsForNewUser(user.id);
-      }
-      userId = user.id;
-    } else {
-      const auth = await requireAuthAsync(req);
-      if (auth instanceof Response) return auth;
-      userId = auth.userId;
-
-      if (legendumMiddleware) {
-        const legendumRes = await legendumMiddleware(req, userId);
-        if (legendumRes) return legendumRes;
-      }
-    }
-
-    // --- Settings (pues mountResource doesn't own `users.meta`) ---
-    if (path === "/t/settings/me" && method === "GET") {
-      return settingsHandlers.getMe(userId);
-    }
-    if (path === "/t/settings/me" && method === "PATCH") {
-      return await settingsHandlers.patchMe(req, userId);
-    }
+    // From here on: bespoke todos routes that own list markdown text +
+    // doc-history. Use pues' `resolveUser` so self-hosted requests land on
+    // the local user without needing a cookie; hosted requests still go
+    // through cookie/bearer auth and 401 if neither is present.
+    const userId = await resolveUser(req);
+    if (!userId)
+      return json({ error: "unauthorized", message: "Not authenticated" }, 401);
 
     // --- Markdown editor + doc history (pues owns the row; this owns the text) ---
     const docHist = matchListDocHistory(path, method);
@@ -518,7 +407,7 @@ export default {
     const listParsed = matchListPath(path);
     if (
       listParsed &&
-      !path.startsWith("/t/") &&
+      !path.startsWith("/pues/") &&
       !path.startsWith("/w/") &&
       !path.startsWith("/dist/")
     ) {
@@ -530,7 +419,7 @@ export default {
           ext ? `${slug}.${ext}` : slug,
           userId,
         );
-        if (result === null) return await serveIndex();
+        if (result === null) return await serveIndex(req);
         return result;
       }
       if (method === "PUT" || method === "POST") {
@@ -540,7 +429,7 @@ export default {
 
     // Self-hosted historically served the SPA for any unmatched route;
     // preserve that to avoid surprising existing clients.
-    if (isSelfHosted()) return await serveIndex();
+    if (isSelfHosted()) return await serveIndex(req);
     return json({ error: "not_found", reason: "route" }, 404);
   },
 };

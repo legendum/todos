@@ -3,10 +3,11 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import InstallDialog from "./InstallDialog";
 
-// @ts-expect-error — pure JS SDK
+// @ts-expect-error — pure JS SDK, vendored via pues
 let linkController: any = null;
 try {
-  linkController = require("../../lib/legendum.js").linkController;
+  linkController =
+    require("../../../pues/base/auth/legendum.js").linkController;
 } catch {}
 
 type LinkState = {
@@ -67,9 +68,10 @@ export default function TopBar({
     if (legendumLinked) {
       wasLinkedRef.current = true;
     } else if (wasLinkedRef.current && linkState.status === "unlinked") {
-      fetch("/auth/logout", { method: "POST", credentials: "include" }).finally(
-        () => window.location.reload(),
-      );
+      fetch("/pues/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      }).finally(() => window.location.reload());
     }
   }, [legendumLinked, linkState.status]);
 
@@ -77,7 +79,7 @@ export default function TopBar({
     if (isSelfHosted || !linkController) return;
 
     const ctrl = linkController({
-      mountAt: "/t/legendum",
+      mountAt: "/pues/legendum",
       onChange: setLinkState,
     });
     ctrlRef.current = ctrl;

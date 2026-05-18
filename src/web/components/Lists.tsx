@@ -162,7 +162,7 @@ export default function Lists({
 
       <div className="links-list-theme links-list-theme--home">
         <p className="links-list-theme-label">Theme</p>
-        <ThemeChooser endpoint="/t/settings/me" />
+        <ThemeChooser />
       </div>
     </div>
   );

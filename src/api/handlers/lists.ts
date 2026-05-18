@@ -13,13 +13,13 @@
  * subscribed to `/api/events`) re-renders done/total counts live.
  */
 
+import { isSelfHosted } from "pues/base/core";
 import { getDb } from "../../lib/db.js";
 import {
   applyRedo,
   applyUndo,
   replaceListTextWithHistory,
 } from "../../lib/listHistory.js";
-import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast } from "../../lib/sse.js";
 import { countTodos, validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";

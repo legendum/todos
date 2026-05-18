@@ -200,9 +200,9 @@ No config file required. All configuration via environment variables:
 |----------|---------|-------------|
 | `PORT` | `3000` | Server listen port |
 | `HOST` | `0.0.0.0` | Server bind host |
-| `TODOS_DOMAIN` | `http://localhost:$PORT` (dev) / `https://todos.in` (prod) | Public domain |
+| `PUES_DOMAIN` | `http://localhost:$PORT` (dev) / `https://todos.in` (prod) | Public domain (pues namespace, v0.8.0+) |
 | `TODOS_DB_PATH` | `data/todos.db` | SQLite path |
-| `TODOS_COOKIE_SECRET` | — | Required in hosted mode |
+| `PUES_COOKIE_SECRET` | — | Required in hosted mode (pues namespace, v0.8.0+) |
 | `LEGENDUM_API_KEY` | — | If set, enables hosted mode (auth + billing). If unset, self-hosted mode. |
 | `LEGENDUM_SECRET` | — | Required when `LEGENDUM_API_KEY` is set |
 | `LEGENDUM_BASE_URL` | `https://legendum.co.uk` | Legendum server |

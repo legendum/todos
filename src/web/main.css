@@ -601,6 +601,11 @@ body {
   border: none;
   background: var(--accent);
   color: var(--on-accent);
+  /* Anchor-as-button defaults — no-ops for <button>, preserve the prior
+     login-screen render that previously set these inline. */
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
 }
 .btn:disabled {
   opacity: 0.5;

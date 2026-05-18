@@ -83,9 +83,21 @@ async function deleteListBySlug(slug: string): Promise<number> {
 }
 
 describe("API — self-hosted mode", () => {
-  test("GET /t/settings/me returns local user", async () => {
-    const { status, body } = await jsonGet("/t/settings/me");
-    expect(status).toBe(200);
+  test("GET /pues/me returns local user after bootstrap", async () => {
+    // In self-hosted mode the SPA shell mints a `pues_session` cookie via
+    // `ensureLocalUser` on first page navigation; subsequent fetches
+    // authenticate via that cookie. Simulate that by hitting `/` first.
+    const home = await fetch(`${base}/`, { headers: { Accept: "text/html" } });
+    const setCookie = home.headers.get("set-cookie") ?? "";
+    const sessionMatch = setCookie.match(/pues_session=([^;]+)/);
+    expect(sessionMatch).not.toBeNull();
+    const cookie = `pues_session=${sessionMatch![1]}`;
+
+    const res = await fetch(`${base}/pues/me`, {
+      headers: { Accept: "application/json", Cookie: cookie },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { legendum_linked: boolean };
     expect(body.legendum_linked).toBe(false);
   });
 

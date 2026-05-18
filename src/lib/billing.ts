@@ -1,8 +1,8 @@
+import { isSelfHosted } from "pues/base/core";
 import { getDb } from "./db.js";
-import { isSelfHosted } from "./mode.js";
 
-// @ts-expect-error — pure JS SDK
-const legendum = require("./legendum.js");
+// @ts-expect-error — pure JS SDK, vendored via pues/base/auth
+const legendum = require("../../pues/base/auth/legendum.js");
 
 export function isConfigured(): boolean {
   return legendum.isConfigured();

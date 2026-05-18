@@ -9,7 +9,13 @@ const OPTIONS: { value: ThemePref; label: string }[] = [
 ];
 
 export type ThemeChooserProps = {
-  endpoint?: string;
+  /** Persistence endpoint for the theme PATCH. Defaults to `/pues/me`
+   * (the v0.8.0 pues namespace convention — see SPEC §3.X). Pass `null`
+   * to opt out of server persistence entirely (localStorage only — used
+   * by the anonymous-visitor branch in linkobot). Override with a custom
+   * path for pre-v0.8.0 consumers that have not yet adopted the auth
+   * part. */
+  endpoint?: string | null;
   /** Override the `fetch` implementation for the persistence PATCH. Falls
    * back to the value supplied via `<Pues fetch={...}>`, then to the
    * global `fetch`. Most consumers wrap their app in `<Pues>` and leave
@@ -18,7 +24,7 @@ export type ThemeChooserProps = {
 };
 
 export function ThemeChooser({
-  endpoint,
+  endpoint = "/pues/me",
   fetch: fetchOverride,
 }: ThemeChooserProps) {
   const fetchImpl = usePuesFetch(fetchOverride);

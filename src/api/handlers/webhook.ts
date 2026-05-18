@@ -1,3 +1,4 @@
+import { isSelfHosted } from "pues/base/core";
 import { chargeWebhookWrite } from "../../lib/billing.js";
 import { getDb } from "../../lib/db.js";
 import {
@@ -5,7 +6,6 @@ import {
   applyUndo,
   replaceListTextWithHistory,
 } from "../../lib/listHistory.js";
-import { isSelfHosted } from "../../lib/mode.js";
 import { broadcast, SSE_HEARTBEAT_MS, subscribe } from "../../lib/sse.js";
 import { validateTodosText } from "../../lib/todos.js";
 import { json } from "../json.js";

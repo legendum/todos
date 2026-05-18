@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
+import { isSelfHosted } from "pues/base/core";
 import { getDb } from "./db.js";
-import { isSelfHosted } from "./mode.js";
 import { validateTodosText } from "./todos.js";
 
 /** Product caps — see `docs/UNDO.md` §15. */

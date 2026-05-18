@@ -368,9 +368,9 @@ No config file required. All configuration via environment variables:
 
 - `PORT` — default: `3000`. Server listen port.
 - `HOST` — default: `0.0.0.0`. Server bind host.
-- `TODOS_DOMAIN` — default: `http://localhost:${PORT}` (dev), `https://todos.in` (prod).
+- `PUES_DOMAIN` — default: `http://localhost:${PORT}` (dev), `https://todos.in` (prod). Pues namespace convention since v0.8.0 (was `TODOS_DOMAIN` pre-v0.8.0).
 - `TODOS_DB_PATH` — default: `data/todos.db`.
-- `TODOS_COOKIE_SECRET` — required in hosted mode.
+- `PUES_COOKIE_SECRET` — required in hosted mode. Pues namespace convention since v0.8.0 (was `TODOS_COOKIE_SECRET` pre-v0.8.0).
 - `LEGENDUM_API_KEY` — if set, enables hosted mode (Legendum auth/billing). If not set, self-hosted mode (no auth, no quota). This is the sole signal for hosted vs self-hosted — no `NODE_ENV` needed.
 - `LEGENDUM_SECRET` — required when `LEGENDUM_API_KEY` is set.
 - `LEGENDUM_BASE_URL` — default: `https://legendum.co.uk`.

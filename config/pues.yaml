@@ -3,6 +3,7 @@
 parts:
   - core
   - theme
+  - auth
   - objects
   - sse
 
