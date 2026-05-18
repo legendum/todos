@@ -53,9 +53,18 @@ const ALL_HTTP_METHODS: ReadonlyArray<HttpMethod> = [
 ];
 
 export type PuesConfig = {
-  app?: { name?: string; db?: string };
-  parts?: string[];
-  resources?: Record<string, ResourceConfig>;
+  /** Which `pues/base/<part>` subdirectories this consumer vendors. The
+   * top-level key matches the script's contract (SPEC §9.1). */
+  pues?: string[];
+  /** `core:` is the namespace for the `core` part — currently just `name`. */
+  core?: { name?: string };
+  /** `db:` is the namespace for the `db` part. */
+  db?: { path?: string };
+  /** `pwa:` is the namespace for the `pwa` part. */
+  pwa?: Record<string, unknown>;
+  /** `objects:` is the namespace for the `objects` part. The resource role
+   * mappings (SPEC §5.2) live under `objects.resources`. */
+  objects?: { resources?: Record<string, ResourceConfig> };
 };
 
 /** Resolved parent reference for a parent-scoped resource (SPEC §5.8).

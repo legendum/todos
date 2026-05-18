@@ -33,10 +33,10 @@ configureAuth({ getDb, onNewUser: seedDefaultListsForNewUser });
 
 // --- pues role-mapped resources (SPEC §5) + per-user SSE (SPEC §7) ---
 const puesConfig = await loadPuesConfig();
-const listsResource = puesConfig.resources?.lists;
+const listsResource = puesConfig.objects?.resources?.lists;
 if (!listsResource) {
   throw new Error(
-    "config/pues.yaml: `resources.lists` is required for the /api/lists route.",
+    "config/pues.yaml: `objects.resources.lists` is required for the /api/lists route.",
   );
 }
 

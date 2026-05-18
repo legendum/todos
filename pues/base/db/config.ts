@@ -3,7 +3,7 @@
  *
  * Used by `getDb()` at process boot. Throws if the file is missing,
  * unparseable, or the section absent — the contract is "if `db` is in
- * `parts:`, `db:` is required" (SPEC §9.1 part-keyed config rule).
+ * `pues:`, `db:` is required" (SPEC §9.1 part-keyed config rule).
  *
  * Synchronous because `getDb()` itself is synchronous (existing pues
  * call sites — `configureAuth({ getDb })`, `mountResource({ db: getDb() })`
@@ -34,7 +34,7 @@ export function readDbConfig(root: string): DbConfig {
   if (!db) {
     throw new Error(
       `[pues/db] ${yamlPath} is missing the required 'db:' section. ` +
-        `If 'db' is in 'parts:', a top-level 'db:' key is required ` +
+        `If 'db' is in 'pues:', a top-level 'db:' key is required ` +
         `(SPEC §9.1 part-keyed config).`,
     );
   }

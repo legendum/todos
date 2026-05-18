@@ -2,7 +2,7 @@
 /**
  * Vendor selected parts of the peer ../pues into ./pues.
  *
- * Which parts to vendor is declared in config/pues.yaml under `parts:`.
+ * Which parts to vendor is declared in config/pues.yaml under `pues:`.
  * Edit that file to opt this consumer into more of pues over time.
  */
 
@@ -13,12 +13,12 @@ const SRC_BASE = "../pues/base";
 const DST_BASE = "pues/base";
 
 const config = Bun.YAML.parse(await Bun.file("config/pues.yaml").text()) as {
-  parts?: string[];
+  pues?: string[];
 };
-const parts = config.parts ?? [];
+const parts = config.pues ?? [];
 
 if (parts.length === 0) {
-  console.error("config/pues.yaml has no `parts:` list — nothing to vendor.");
+  console.error("config/pues.yaml has no `pues:` list — nothing to vendor.");
   process.exit(1);
 }
 

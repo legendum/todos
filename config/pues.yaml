@@ -1,6 +1,6 @@
 # Which pues/base/ subdirectories this consumer vendors.
 # Add entries here to adopt more of pues over time, then run `bun run pues`.
-parts:
+pues:
   - core
   - theme
   - auth
@@ -9,7 +9,7 @@ parts:
   - pwa
   - db
 
-app:
+core:
   name: todos
 
 # `base/db/` reads this section. SQLite WAL + foreign keys are baked
@@ -26,9 +26,11 @@ pwa:
   background_color: "#0f172a"
   theme_color: "#0f172a"
 
-# Role-mapping for base/objects/ — see SPEC §5.2.
-# todos' `lists` table matches every default in §5.3 so no `columns:` block
-# is needed; the loader silently drops the absent `meta` role at startup.
-resources:
-  lists:
-    table: lists
+# `base/objects/` reads this section. Role mapping per SPEC §5.2.
+# todos' `lists` table matches every default in §5.3 so no `columns:`
+# block is needed; the loader silently drops the absent `meta` role
+# at startup.
+objects:
+  resources:
+    lists:
+      table: lists

@@ -3,7 +3,7 @@
  *
  * Used by `buildPwa` (build-time) and `mountPwaRoutes` (server boot).
  * Throws if the file is missing, unparseable, or the section absent —
- * the contract is "if `pwa` is in `parts:`, `pwa:` is required" (SPEC
+ * the contract is "if `pwa` is in `pues:`, `pwa:` is required" (SPEC
  * §9.1 part-keyed config rule).
  *
  * The pwa part deliberately reads pues.yaml itself rather than going
@@ -49,7 +49,7 @@ export async function readPwaConfig(root: string): Promise<ResolvedPwaConfig> {
   if (!pwa) {
     throw new Error(
       `[pues/pwa] ${path} is missing the required 'pwa:' section. ` +
-        `If 'pwa' is in 'parts:', a top-level 'pwa:' key is required ` +
+        `If 'pwa' is in 'pues:', a top-level 'pwa:' key is required ` +
         `(SPEC §9.1 part-keyed config).`,
     );
   }
