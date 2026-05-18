@@ -221,8 +221,7 @@ async function serveIndex(req: Request): Promise<Response> {
     <link rel="icon" type="image/png" sizes="512x512" href="/todos-512.png" />
     <link rel="apple-touch-icon" href="/todos-192.png" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="stylesheet" href="/pues/theme.css" />
-    <link rel="stylesheet" href="/pues/objects.css" />
+    <link rel="stylesheet" href="/dist/pues.css" />
     <link rel="stylesheet" href="/main.css" />
   </head>
   <body>
@@ -284,10 +283,8 @@ export default {
 
     // --- Static assets (same-origin, no CORS) ---
     "/main.css": () => serveStatic(join(root, "src/web/main.css"), "text/css"),
-    "/pues/theme.css": () =>
-      serveStatic(join(root, "pues/base/theme/theme.css"), "text/css"),
-    "/pues/objects.css": () =>
-      serveStatic(join(root, "pues/base/objects/objects.css"), "text/css"),
+    "/dist/pues.css": () =>
+      serveStatic(join(root, "public/dist/pues.css"), "text/css"),
     "/todos.png": () =>
       serveStatic(join(root, "public/todos.png"), "image/png"),
     "/undo-arrow.svg": () =>

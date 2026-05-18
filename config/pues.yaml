@@ -8,23 +8,20 @@ pues:
   - sse
   - pwa
   - db
+  - style
 
+# Canonical consumer identifier. Lowercase slug. Drives:
+#   - data/<core.name>.db   (base/db/ default)
+#   - /<core.name>-192.png and -512.png (PWA icon defaults)
+#   - PWA manifest display name (overridden below for capitalisation)
 core:
   name: todos
 
-# `base/db/` reads this section. SQLite WAL + foreign keys are baked
-# in; pues applies `config/schema.sql` and any pending
-# `config/migrations/*.sql` on first `getDb()`. PUES_DB_PATH env var
-# overrides the path (used by tests).
-db:
-  path: data/todos.db
-
-# `base/pwa/` reads this section. Pues bakes start_url + display +
-# icon type/purpose; everything else is per-consumer.
-pwa:
-  name: Todos
-  background_color: "#0f172a"
-  theme_color: "#0f172a"
+# `base/style/` reads this section (SPEC §8.1). All fields optional —
+# omitting `style:` entirely produces pues defaults verbatim. todos
+# adopts the defaults without overrides for v0.11.0; expand here when
+# brand needs diverge.
+style: {}
 
 # `base/objects/` reads this section. Role mapping per SPEC §5.2.
 # todos' `lists` table matches every default in §5.3 so no `columns:`

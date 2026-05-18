@@ -1,63 +1,40 @@
 :root {
-  color-scheme: dark;
-  /* Matches topbar vertical padding (10+10) + filter min-height (44, from .pues-filter-bar) + border (1) = 65px. */
+  /* Matches topbar vertical padding (10+10) + filter min-height (44,
+     from .pues-filter-bar) + border (1) = 65px. */
   --topbar-height: 65px;
-  --bg-page: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-raised: #334155;
-  --bg-raised-hover: #475569;
-  --text-primary: #e2e8f0;
-  --text-body: #cbd5e1;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-faint: #475569;
-  --border-default: #334155;
-  --border-strong: #475569;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-light: #60a5fa;
-  --accent-glow: rgba(59, 130, 246, 0.35);
-  --danger: #dc2626;
-  --danger-hover: #ef4444;
-  --danger-active: #b91c1c;
-  --danger-text: #f87171;
-  --success: #22c55e;
-  --on-accent: #ffffff;
-  --shadow-sm: rgba(0, 0, 0, 0.3);
-  --shadow-md: rgba(0, 0, 0, 0.35);
-  --shadow-lg: rgba(0, 0, 0, 0.4);
-  --shadow-xl: rgba(0, 0, 0, 0.5);
-  --overlay: rgba(0, 0, 0, 0.6);
-}
 
-[data-theme="light"] {
-  color-scheme: light;
-  --bg-page: #f1f5f9;
-  --bg-surface: #ffffff;
-  --bg-raised: #e2e8f0;
-  --bg-raised-hover: #cbd5e1;
-  --text-primary: #0f172a;
-  --text-body: #1e293b;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --text-faint: #94a3b8;
-  --border-default: #e2e8f0;
-  --border-strong: #94a3b8;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-light: #3b82f6;
-  --accent-glow: rgba(37, 99, 235, 0.3);
-  --danger: #dc2626;
-  --danger-hover: #ef4444;
-  --danger-active: #b91c1c;
-  --danger-text: #dc2626;
-  --success: #16a34a;
-  --on-accent: #ffffff;
-  --shadow-sm: rgba(15, 23, 42, 0.08);
-  --shadow-md: rgba(15, 23, 42, 0.12);
-  --shadow-lg: rgba(15, 23, 42, 0.18);
-  --shadow-xl: rgba(15, 23, 42, 0.22);
-  --overlay: rgba(15, 23, 42, 0.4);
+  /* Aliases — todos' bespoke chrome (`.topbar`, `.todo-row`, …) was
+     written against unprefixed names; map them to pues tokens so the
+     existing CSS keeps working unchanged. Mode-agnostic because
+     `var()` resolves dynamically — switching `[data-theme="light"]`
+     on the root updates every `--pues-*` token, and these aliases
+     follow. */
+  --bg-page:        var(--pues-bg-page);
+  --bg-surface:     var(--pues-bg-surface);
+  --bg-raised:      var(--pues-bg-raised);
+  --bg-raised-hover:var(--pues-bg-raised-hover);
+  --text-primary:   var(--pues-text-primary);
+  --text-body:      var(--pues-text-body);
+  --text-secondary: var(--pues-text-secondary);
+  --text-muted:     var(--pues-text-muted);
+  --text-faint:     var(--pues-text-faint);
+  --border-default: var(--pues-border-default);
+  --border-strong:  var(--pues-border-strong);
+  --accent:         var(--pues-accent);
+  --accent-hover:   var(--pues-accent-hover);
+  --accent-light:   var(--pues-accent-light);
+  --accent-glow:    var(--pues-accent-glow);
+  --danger:         var(--pues-danger);
+  --danger-hover:   var(--pues-danger-hover);
+  --danger-active:  var(--pues-danger-active);
+  --danger-text:    var(--pues-danger-text);
+  --success:        var(--pues-success);
+  --on-accent:      var(--pues-on-accent);
+  --shadow-sm:      var(--pues-shadow-sm);
+  --shadow-md:      var(--pues-shadow-md);
+  --shadow-lg:      var(--pues-shadow-lg);
+  --shadow-xl:      var(--pues-shadow-xl);
+  --overlay:        var(--pues-overlay);
 }
 
 * {
@@ -812,51 +789,9 @@ body {
   color: var(--success);
 }
 
-/* Dialog */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.dialog {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 520px;
-  max-height: 85vh;
-  overflow-y: auto;
-  box-shadow: 0 16px 48px var(--shadow-xl);
-}
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-default);
-}
-.dialog-close {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 24px;
-  cursor: pointer;
-  padding: 4px 8px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.dialog-close:hover {
-  background: var(--bg-raised);
-  color: var(--text-primary);
-}
-.dialog-body {
-  padding: 20px;
-}
+/* Dialog content classes — the framework `.pues-dialog-*` rules live
+   in pues.css; these are todos-owned content classes that render
+   inside `.pues-dialog-body`. */
 .dialog-section {
   margin-bottom: 20px;
 }
