@@ -6,7 +6,7 @@ import {
   mountUserSettings,
   resolveUser,
   withSelfHostedSession,
-} from "pues/base/auth";
+} from "pues/base/auth/server";
 import { isSelfHosted } from "pues/base/core";
 import { loadPuesConfig, mountResource } from "pues/base/objects";
 import { chargeListCreate, closeTabs } from "../lib/billing.js";
