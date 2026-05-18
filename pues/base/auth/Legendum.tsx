@@ -1,20 +1,20 @@
 /**
- * `<Legendum>` — the single widget that covers both Legendum auth states.
+ * `<Legendum>` — the single widget that covers every Legendum auth state.
  *
  *   user === undefined  → render nothing (loading)
  *   user === null       → "Login with Legendum" anchor → /pues/auth/login
  *   user && !user.hosted → render nothing (self-hosted: no Legendum UI)
- *   user && hosted, not yet linked → "Link Legendum" button (calls SDK)
- *   user && hosted, linked        → "$balance · Buy more credits" link
+ *   user && hosted, status "unlinked"   → "Link Legendum" button → startLink
+ *   user && hosted, status "linking"    → disabled "Linking…" button
+ *   user && hosted, status "error"      → "Retry" button (if `errorLabel` set)
+ *                                          else null
+ *   user && hosted, status "linked"     → balance anchor → account URL
  *
- * Reads tri-state user via `usePuesUser()` (the `<Pues user>` context
- * reader); the consumer must wrap their app in `<Pues user={user}>` for
- * this widget to function.
+ * Reads tri-state user via `usePuesUser()`; the consumer must wrap the
+ * app in `<Pues user={...}>` for this widget to function.
  *
- * Styling is consumer-driven via `className` (always applied) plus
- * branch-specific `classNameAnon` / `classNameAuthed`. Labels and
- * balance formatting are overridable for localization / brand polish,
- * but the URL surface (`/pues/auth/login`, `/pues/legendum/*`) is
+ * Styling is consumer-driven via class slots. The URL surface
+ * (`/pues/auth/login`, `/pues/legendum/*`, `/pues/auth/logout`) is
  * hardcoded per the pues namespace convention.
  *
  * The `linkController` is owned internally — consumers do not manage
@@ -22,9 +22,19 @@
  * `<Pues user>` context stays stale until the next `useUser` refetch
  * or page reload; the widget itself reflects the linked state
  * immediately via its own SDK subscription.
+ *
+ * Optional behaviors (opt-in via props) cover the bespoke patterns
+ * todos used to ship inline in its TopBar:
+ *   - `pollIntervalMs`: periodic status refresh while mounted.
+ *   - `refreshOnEvent`: window event name; calls checkStatus on dispatch.
+ *   - `autoLogoutOnUnlink`: POSTs /pues/auth/logout + reloads on
+ *     linked → unlinked transition.
+ *   - `lowCreditsThreshold` + `classNameLowCredits`: visual hint when
+ *     the linked-state balance falls below a threshold.
+ *   - `iconSlot`: render a brand glyph before the label / balance text.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePuesUser } from "../core/Pues";
 
 // Bun's bundler resolves bare `require()` statically when targeting
@@ -57,24 +67,68 @@ export type LegendumProps = {
   className?: string;
   /** Additional class for the anonymous login CTA. */
   classNameAnon?: string;
-  /** Additional class for the authenticated branches (link / linking / linked). */
+  /** Additional class for any authenticated branch (unlinked, linking,
+   * error, linked). Applied alongside the more specific
+   * `classNameLinked` / `classNameUnlinked` when those match. */
   classNameAuthed?: string;
+  /** Additional class for the linked-state anchor (status === "linked"). */
+  classNameLinked?: string;
+  /** Additional class for the unlinked / linking / error states
+   * (the "needs to link" button family). */
+  classNameUnlinked?: string;
+  /** Additional class for the linked-state anchor when the balance
+   * falls below `lowCreditsThreshold`. */
+  classNameLowCredits?: string;
   /** Label for the anonymous login CTA (default "Login with Legendum"). */
   loginLabel?: string;
   /** Label for the "link Legendum" button shown to authed-but-not-linked users. */
   linkLabel?: string;
-  /** Suffix on the linked-account link (default "Buy more credits"). */
-  buyMoreLabel?: string;
-  /** Format the balance (in cents) for display. Default formats as `$X.XX`. */
+  /** Label for the disabled in-flight "Linking…" button. */
+  linkingLabel?: string;
+  /** Label for the error-state retry button. When omitted, the widget
+   * renders null on error (consumer must surface failures another way). */
+  errorLabel?: string;
+  /** Format the balance (in cents) for display. Default returns the
+   * `$X.XX · Buy more credits` shape. Override to swap currency,
+   * units, or copy entirely (e.g. todos returns "1234 Credits"). */
   formatBalance?: (cents: number) => string;
+  /** Optional glyph rendered before the label / balance text. When
+   * provided, the text is wrapped in a `<span>` so the icon and text
+   * are styled as siblings. */
+  iconSlot?: ReactNode;
+  /** Poll `checkStatus` on this interval (milliseconds) while the
+   * widget is mounted in an authed branch. Default 0 = no polling. */
+  pollIntervalMs?: number;
+  /** Window event name; dispatching it triggers `checkStatus`. Use to
+   * refresh the balance right after a known credit-spending action
+   * (e.g. dispatch after creating a list to see the new balance). */
+  refreshOnEvent?: string;
+  /** Apply `classNameLowCredits` when the linked balance is below
+   * this many cents. Default 0 = never low. */
+  lowCreditsThreshold?: number;
+  /** When set, a linked → unlinked transition triggers a POST to
+   * `/pues/auth/logout` followed by `window.location.reload()`. */
+  autoLogoutOnUnlink?: boolean;
 };
 
 function defaultFormatBalance(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)} · Buy more credits`;
 }
 
-function cn(...classes: (string | undefined)[]): string {
+function cn(...classes: (string | null | undefined)[]): string {
   return classes.filter(Boolean).join(" ");
+}
+
+/** Render the icon + text together. When no icon, returns the text
+ *  directly (preserves the prior `<a>{text}</a>` DOM shape). */
+function withIcon(icon: ReactNode, label: ReactNode): ReactNode {
+  if (!icon) return label;
+  return (
+    <>
+      {icon}
+      <span>{label}</span>
+    </>
+  );
 }
 
 export function Legendum(props: LegendumProps = {}) {
@@ -91,7 +145,7 @@ export function Legendum(props: LegendumProps = {}) {
         className={cn(props.className, props.classNameAnon)}
         href="/pues/auth/login"
       >
-        {props.loginLabel ?? "Login with Legendum"}
+        {withIcon(props.iconSlot, props.loginLabel ?? "Login with Legendum")}
       </a>
     );
   }
@@ -109,7 +163,12 @@ function LegendumAuthed(props: LegendumProps) {
     error: null,
   });
   const controllerRef = useRef<LinkController | null>(null);
+  const wasLinkedRef = useRef(false);
 
+  // Build the controller + subscribe; also wire the optional polling
+  // interval and refreshOnEvent listener inside the same effect so
+  // they tear down with the controller.
+  const { pollIntervalMs, refreshOnEvent } = props;
   useEffect(() => {
     const controller = legendumSdk.linkController({
       linkUrl: "/pues/legendum/link",
@@ -119,45 +178,106 @@ function LegendumAuthed(props: LegendumProps) {
     }) as LinkController;
     controllerRef.current = controller;
     controller.checkStatus();
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    if (pollIntervalMs && pollIntervalMs > 0) {
+      intervalId = setInterval(() => controller.checkStatus(), pollIntervalMs);
+    }
+
+    let onRefresh: (() => void) | null = null;
+    if (refreshOnEvent) {
+      onRefresh = () => controller.checkStatus();
+      window.addEventListener(refreshOnEvent, onRefresh);
+    }
+
     return () => {
+      if (intervalId !== null) clearInterval(intervalId);
+      if (onRefresh && refreshOnEvent)
+        window.removeEventListener(refreshOnEvent, onRefresh);
       controller.destroy();
       controllerRef.current = null;
     };
-  }, []);
+  }, [pollIntervalMs, refreshOnEvent]);
 
-  const classes = cn(props.className, props.classNameAuthed);
+  // Auto-logout on linked → unlinked transition.
+  const autoLogout = props.autoLogoutOnUnlink;
+  useEffect(() => {
+    if (!autoLogout) return;
+    if (state.status === "linked") {
+      wasLinkedRef.current = true;
+      return;
+    }
+    if (wasLinkedRef.current && state.status === "unlinked") {
+      fetch("/pues/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      }).finally(() => window.location.reload());
+    }
+  }, [autoLogout, state.status]);
+
   const formatBalance = props.formatBalance ?? defaultFormatBalance;
   const linkLabel = props.linkLabel ?? "Link Legendum";
-  const buyMoreLabel = props.buyMoreLabel ?? "Buy more credits";
+  const linkingLabel = props.linkingLabel ?? "Linking…";
+  const baseAuthed = cn(props.className, props.classNameAuthed);
 
-  if (state.status === "loading" || state.status === "error") return null;
+  if (state.status === "loading") return null;
 
   if (state.status === "unlinked") {
     return (
       <button
         type="button"
-        className={classes}
+        className={cn(baseAuthed, props.classNameUnlinked)}
         onClick={() => controllerRef.current?.startLink()}
       >
-        {linkLabel}
+        {withIcon(props.iconSlot, linkLabel)}
       </button>
     );
   }
 
   if (state.status === "linking") {
-    return <span className={classes}>Linking…</span>;
+    return (
+      <button
+        type="button"
+        className={cn(baseAuthed, props.classNameUnlinked)}
+        disabled
+      >
+        {withIcon(props.iconSlot, linkingLabel)}
+      </button>
+    );
+  }
+
+  if (state.status === "error") {
+    if (!props.errorLabel) return null;
+    return (
+      <button
+        type="button"
+        className={cn(baseAuthed, props.classNameUnlinked)}
+        onClick={() => controllerRef.current?.startLink()}
+      >
+        {withIcon(props.iconSlot, props.errorLabel)}
+      </button>
+    );
   }
 
   // status === "linked"
   const balance = state.balance ?? 0;
+  const isLow =
+    props.lowCreditsThreshold !== undefined &&
+    props.lowCreditsThreshold > 0 &&
+    balance < props.lowCreditsThreshold;
+  const linkedClass = cn(
+    baseAuthed,
+    props.classNameLinked,
+    isLow ? props.classNameLowCredits : null,
+  );
   return (
     <a
-      className={classes}
+      className={linkedClass}
       href={controllerRef.current?.accountUrl}
       target="_blank"
       rel="noopener noreferrer"
     >
-      {formatBalance(balance)} · {buyMoreLabel}
+      {withIcon(props.iconSlot, formatBalance(balance))}
     </a>
   );
 }

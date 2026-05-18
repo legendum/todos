@@ -28,6 +28,7 @@
  */
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { wrapFetchWithUnauthorized } from "./unauthorizedHandler";
 
 /**
  * The user shape carried by `<Pues user>` and read by `usePuesUser()`.
@@ -71,9 +72,20 @@ export type PuesProps = {
 };
 
 export function Pues({ fetch: fetchImpl, user, children }: PuesProps) {
+  // Wrap the supplied (or global) fetch with the 401 handler so every
+  // pues-resolved fetch participates in the auto-logout-on-session-
+  // expiry behavior. `useUser` subscribes via `onPuesUnauthorized` and
+  // flips its state to `null` when the handler fires — consumers do
+  // not wire either side. Memoized on the input fetch so the resolved
+  // identity is stable across re-renders (downstream useMemo /
+  // useEffect deps that key on fetch will not invalidate needlessly).
+  const wrappedFetch = useMemo(
+    () => wrapFetchWithUnauthorized(fetchImpl ?? fetch),
+    [fetchImpl],
+  );
   const value = useMemo<PuesValue>(
-    () => ({ fetch: fetchImpl, user }),
-    [fetchImpl, user],
+    () => ({ fetch: wrappedFetch, user }),
+    [wrappedFetch, user],
   );
   return <PuesContext.Provider value={value}>{children}</PuesContext.Provider>;
 }

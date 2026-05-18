@@ -29,8 +29,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { type PuesUser, usePuesFetch } from "../core/Pues";
+import { onPuesUnauthorized } from "../core/unauthorizedHandler";
 import { reconcileTheme } from "../theme/state";
-import { onPuesUnauthorized } from "./puesAuthedFetch";
 
 export type UseUserResult = {
   user: PuesUser | null;

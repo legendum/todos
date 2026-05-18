@@ -1,4 +1,4 @@
-import { Legendum, puesAuthedFetch, useUser } from "pues/base/auth";
+import { Legendum, useUser } from "pues/base/auth";
 import { Pues } from "pues/base/core";
 import { useResource } from "pues/base/objects";
 import { useEffect, useRef, useState } from "react";
@@ -29,13 +29,6 @@ function getSlugFromPath(): string | null {
   return slug || null;
 }
 
-/** Module-scope authedFetch — wrap the global fetch once at module load so
- * the function identity is stable across re-renders. Passed both to
- * `useUser` (so its `/pues/me` request is authed-aware) and to `<Pues fetch>`
- * (so every downstream hook inherits it). On 401, useUser auto-subscribes
- * and flips user to null — no manual setUnauthorizedHandler wiring. */
-const authedFetch = puesAuthedFetch();
-
 /** Resolve a slug to a ListEntry, preferring the network and falling back to
  * the offline list cache. */
 async function resolveSlug(slug: string): Promise<ListEntry | null> {
@@ -55,7 +48,7 @@ async function resolveSlug(slug: string): Promise<ListEntry | null> {
 }
 
 export default function App() {
-  const { user, loading } = useUser({ fetch: authedFetch });
+  const { user, loading } = useUser();
   const [selectedList, setSelectedList] = useState<ListEntry | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -142,7 +135,7 @@ export default function App() {
   // (loading) renders <Legendum> as null; user={null} renders its login
   // CTA; user={PuesUser} renders the authed widgets.
   return (
-    <Pues fetch={authedFetch} user={loading ? undefined : user}>
+    <Pues user={loading ? undefined : user}>
       {loading ? (
         <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
           Loading...
