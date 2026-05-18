@@ -52,7 +52,6 @@ export default function App() {
   const [selectedList, setSelectedList] = useState<ListEntry | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const filterInputRef = useRef<HTMLInputElement>(null);
-  const isSelfHosted = user ? !user.hosted : false;
 
   // Hoisted resource — single SSE subscription + single fetch shared by
   // Lists (home) and TodoList (detail). `useRename` inside `<RenameTitle>`
@@ -150,7 +149,6 @@ export default function App() {
       ) : (
         <>
           <TopBar
-            isSelfHosted={isSelfHosted}
             filterQuery={filterQuery}
             setFilterQuery={setFilterQuery}
             filterInputRef={filterInputRef}

@@ -1,47 +1,31 @@
+import { Legendum } from "pues/base/auth";
 import { FilterBar } from "pues/base/objects";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import InstallDialog from "./InstallDialog";
 
-// @ts-expect-error — pure JS SDK, vendored via pues
-let linkController: any = null;
-try {
-  linkController =
-    require("../../../pues/base/auth/legendum.js").linkController;
-} catch {}
-
-type LinkState = {
-  status: "loading" | "unlinked" | "linking" | "linked" | "error";
-  balance: number | null;
-  error: string | null;
-};
-
 type Props = {
-  isSelfHosted?: boolean;
   filterQuery: string;
   setFilterQuery: Dispatch<SetStateAction<string>>;
   filterInputRef: RefObject<HTMLInputElement | null>;
 };
 
+const LEGENDUM_ICON = <span className="legendum-icon">&#x2C60;</span>;
+
+function formatCreditsBalance(cents: number): string {
+  return cents !== null ? `${cents.toLocaleString()} Credits` : "Credits";
+}
+
 export default function TopBar({
-  isSelfHosted,
   filterQuery,
   setFilterQuery,
   filterInputRef,
 }: Props) {
-  const [linkState, setLinkState] = useState<LinkState>({
-    status: "loading",
-    balance: null,
-    error: null,
-  });
-  const ctrlRef = useRef<any>(null);
   const headerRef = useRef<HTMLElement | null>(null);
   const [showInstall, setShowInstall] = useState(false);
 
-  const wasLinkedRef = useRef(false);
-
   // Keep the fixed topbar pinned to the top of the VISUAL viewport on iOS
-  // so opening the mobile keyboard (and any resulting page scroll) can't
+  // so opening the mobile keyboard (and any resulting page scroll) cannot
   // hide the header/filter row.
   useEffect(() => {
     const vv = window.visualViewport;
@@ -58,44 +42,6 @@ export default function TopBar({
       vv.removeEventListener("scroll", update);
     };
   }, []);
-
-  const legendumLinked = linkState.status === "linked";
-  const lowCredits =
-    legendumLinked && linkState.balance !== null && linkState.balance < 50;
-
-  // Auto-logout when Legendum is unlinked
-  useEffect(() => {
-    if (legendumLinked) {
-      wasLinkedRef.current = true;
-    } else if (wasLinkedRef.current && linkState.status === "unlinked") {
-      fetch("/pues/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      }).finally(() => window.location.reload());
-    }
-  }, [legendumLinked, linkState.status]);
-
-  useEffect(() => {
-    if (isSelfHosted || !linkController) return;
-
-    const ctrl = linkController({
-      mountAt: "/pues/legendum",
-      onChange: setLinkState,
-    });
-    ctrlRef.current = ctrl;
-    ctrl.checkStatus();
-
-    const intervalId = setInterval(() => ctrl.checkStatus(), 60_000);
-    const onRefresh = () => ctrl.checkStatus();
-    window.addEventListener("todos-credits-refresh", onRefresh);
-
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener("todos-credits-refresh", onRefresh);
-      ctrl.destroy();
-      ctrlRef.current = null;
-    };
-  }, [isSelfHosted]);
 
   return (
     <header className="topbar" ref={headerRef}>
@@ -122,44 +68,23 @@ export default function TopBar({
           className="topbar-search-filter"
         />
       </div>
-      {!isSelfHosted && linkController && (
-        <div className="topbar-right">
-          {legendumLinked ? (
-            <a
-              href={
-                ctrlRef.current?.accountUrl || "https://legendum.co.uk/account"
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`legendum-btn legendum-linked${lowCredits ? " low-credits" : ""}`}
-            >
-              <span className="legendum-icon">&#x2C60;</span>
-              <span>
-                {linkState.balance !== null
-                  ? `${linkState.balance.toLocaleString()} Credits`
-                  : "Credits"}
-              </span>
-            </a>
-          ) : linkState.status === "unlinked" ||
-            linkState.status === "linking" ||
-            linkState.status === "error" ? (
-            <button
-              className="legendum-btn legendum-link"
-              onClick={() => ctrlRef.current?.startLink()}
-              disabled={linkState.status === "linking"}
-            >
-              <span className="legendum-icon">&#x2C60;</span>
-              <span>
-                {linkState.status === "linking"
-                  ? "Linking..."
-                  : linkState.status === "error"
-                    ? "Retry"
-                    : "Link Legendum"}
-              </span>
-            </button>
-          ) : null}
-        </div>
-      )}
+      <div className="topbar-right">
+        <Legendum
+          className="legendum-btn"
+          classNameLinked="legendum-linked"
+          classNameUnlinked="legendum-link"
+          classNameLowCredits="low-credits"
+          iconSlot={LEGENDUM_ICON}
+          linkLabel="Link Legendum"
+          linkingLabel="Linking..."
+          errorLabel="Retry"
+          formatBalance={formatCreditsBalance}
+          lowCreditsThreshold={50}
+          pollIntervalMs={60_000}
+          refreshOnEvent="todos-credits-refresh"
+          autoLogoutOnUnlink
+        />
+      </div>
       {showInstall && <InstallDialog onClose={() => setShowInstall(false)} />}
     </header>
   );
