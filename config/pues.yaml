@@ -17,11 +17,9 @@ pues:
 core:
   name: todos
 
-# `base/style/` reads this section (SPEC §8.1). All fields optional —
-# omitting `style:` entirely produces pues defaults verbatim. todos
-# adopts the defaults without overrides for v0.11.0; expand here when
-# brand needs diverge.
-style: {}
+# `base/style/` reads `style:` (SPEC §8.1). todos rides the pues
+# defaults; expand here (style.dark / style.light / style.vars /
+# style.css) when brand needs diverge.
 
 # `base/objects/` reads this section. Role mapping per SPEC §5.2.
 # todos' `lists` table matches every default in §5.3 so no `columns:`

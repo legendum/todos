@@ -7,9 +7,11 @@
  * `pwa:` fields are optional — sensible defaults come from `core.name`
  * (icon slug + display name) and `style.dark` (manifest colours).
  *
- * The pwa part deliberately reads pues.yaml itself rather than going
- * through `base/objects/loadPuesConfig`, so a consumer vendoring `pwa`
- * is not forced to also vendor `objects`.
+ * The pwa part reads pues.yaml directly rather than going through
+ * `base/objects/loadPuesConfig`, so a consumer vendoring `pwa` is not
+ * forced to also vendor `objects`. It does import `DEFAULT_TOKENS`
+ * from `../style/tokens` for manifest-colour fallback — vendoring
+ * `pwa` therefore implies vendoring `style`.
  */
 
 import { join } from "node:path";
@@ -23,11 +25,11 @@ export type PwaConfig = {
   name?: string;
   /** Manifest `short_name`. Defaults to `name`. */
   short_name?: string;
-  /** Hex string. Omitted from output if unset. Inherits from
-   * `style.dark.bg` when the `style` part is also vendored. */
+  /** Hex string. Defaults to `style.dark.bg_page` if set, else
+   * `DEFAULT_TOKENS.dark.bg_page` from `base/style/tokens`. */
   background_color?: string;
-  /** Hex string. Omitted from output if unset. Inherits from
-   * `style.dark.chrome` when the `style` part is also vendored. */
+  /** Hex string. Defaults to `style.dark.chrome` if set, else
+   * `DEFAULT_TOKENS.dark.chrome` from `base/style/tokens`. */
   theme_color?: string;
   /** 192x192 icon URL. Defaults to `/<core.name>-192.png`. */
   icon192?: string;
@@ -35,12 +37,7 @@ export type PwaConfig = {
   icon512?: string;
 };
 
-export type ResolvedPwaConfig = Required<
-  Pick<PwaConfig, "name" | "short_name" | "icon192" | "icon512">
-> & {
-  background_color?: string;
-  theme_color?: string;
-};
+export type ResolvedPwaConfig = Required<PwaConfig>;
 
 export async function readPwaConfig(root: string): Promise<ResolvedPwaConfig> {
   const path = join(root, "config/pues.yaml");
