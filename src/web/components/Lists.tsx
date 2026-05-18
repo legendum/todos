@@ -25,6 +25,7 @@ import { ThemeChooser } from "pues/base/theme";
 import type { RefObject } from "react";
 import { useEffect } from "react";
 
+import { countTodos } from "../../lib/todos.js";
 import { wireRowToListEntry } from "../listEntry";
 import type { ListEntry } from "../offlineDb";
 import DragHandle from "./DragHandle";
